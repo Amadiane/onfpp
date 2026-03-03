@@ -9,6 +9,7 @@ const CONFIG = {
   API_LOGIN: "/api/login/",            // correspond à ton urls.py
   API_ME: "/api/me/",                  // endpoint pour récupérer l'utilisateur connecté
   API_CREATE_USER: "/api/users/create/", // création d'utilisateur
+  API_USER_LIST: "/api/users/",   
   API_ROLES: "/api/roles/",
   API_REGIONS: "/api/regions/",
   API_CENTRES: "/api/centres/",
