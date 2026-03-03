@@ -2,7 +2,7 @@
 const BASE_URL =
   window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
     ? "http://127.0.0.1:8000"
-    : "https://tekacom.onrender.com"; // URL backend sur Render
+    : "https://onfpp.onrender.com"; // URL backend sur Render
 
 const CONFIG = {
   BASE_URL,
