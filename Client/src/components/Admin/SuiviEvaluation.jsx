@@ -209,137 +209,201 @@ function NewSession({ token, onBack, onDone }) {
 /* ══════════════════════════════════════════════════════
    3 — DÉTAIL SESSION : saisie + résultats
 ══════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════
+   3 — DÉTAIL SESSION
+   Flux :
+     - Définir les rubriques une fois (partagées)
+     - Écrire nom apprenant → Valider → formulaire de notes
+     - Sélectionner les points par rubrique → total + taux live
+     - Enregistrer → carte résultat
+   Onglet Résultats : tableau global + exports
+══════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════
+   3 — DÉTAIL SESSION
+══════════════════════════════════════════════════════ */
 function SessionDetail({ token, session, onBack }) {
-  /* ── onglet ── */
-  const [tab, setTab] = useState("saisie"); // "saisie" | "resultats"
+  const [tab,          setTab]          = useState("saisie");
 
-  /* ── critères de la session (rubriques) ── */
-  const [criteres,      setCriteres]      = useState([]);
-  const [newCritere,    setNewCritere]    = useState("");
-  const [addingCritere, setAddingCritere] = useState(false);
+  /* ── Rubriques ── */
+  const [criteres,     setCriteres]     = useState([]);
+  const [newCrit,      setNewCrit]      = useState("");
+  const [addingCrit,   setAddingCrit]   = useState(false);
+  // Modifier rubrique : {id, nom}
+  const [editCrit,     setEditCrit]     = useState(null);
+  const [editCritVal,  setEditCritVal]  = useState("");
+  const [savingCrit,   setSavingCrit]   = useState(null);  // id en cours de save
+  const [deletingCrit, setDeletingCrit] = useState(null);  // id en cours de delete
 
-  /* ── apprenants + notes ── */
-  const [apprenants,    setApprenants]    = useState([]); // [{id,nom,email,notes:{critereId:note}}]
-  const [newNom,        setNewNom]        = useState("");
-  const [newEmail,      setNewEmail]      = useState("");
-  const [addingApp,     setAddingApp]     = useState(false);
-  const [savingApp,     setSavingApp]     = useState(null); // id en cours de save
+  /* ── Apprenants évalués ── */
+  const [apprenants,   setApprenants]   = useState([]);
+  // Modifier apprenant : {id, nom, email}
+  const [editApp,      setEditApp]      = useState(null);
+  const [editAppVal,   setEditAppVal]   = useState({ nom:"", email:"" });
+  const [savingApp,    setSavingApp]    = useState(null);
+  const [deletingApp,  setDeletingApp]  = useState(null);
+  // Confirmation suppression
+  const [confirmDel,   setConfirmDel]   = useState(null); // {type:"crit"|"app", id, nom}
 
-  /* ── résultats ── */
-  const [results,       setResults]       = useState([]);
-  const [loadingRes,    setLoadingRes]    = useState(false);
+  /* ── Draft nouvel apprenant ── */
+  const [draft,        setDraft]        = useState(null);
+  const [draftNom,     setDraftNom]     = useState("");
+  const [draftEmail,   setDraftEmail]   = useState("");
+  const [savingDraft,  setSavingDraft]  = useState(false);
 
-  /* ── exports ── */
-  const [exporting,     setExporting]     = useState("");
-  const [graphUrl,      setGraphUrl]      = useState(null);
-  const [graphLoading,  setGraphLoading]  = useState(false);
+  /* ── Résultats / Exports ── */
+  const [results,      setResults]      = useState([]);
+  const [loadingRes,   setLoadingRes]   = useState(false);
+  const [exporting,    setExporting]    = useState("");
+  const [graphUrl,     setGraphUrl]     = useState(null);
+  const [graphLoading, setGraphLoading] = useState(false);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState("");
 
-  /* ── loading initial ── */
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState("");
+  const fd = d => d ? new Date(d).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"}) : "—";
 
-  /* ─────────────────────────────────────────
-     Chargement initial : critères + apprenants + évaluations existantes
-  ───────────────────────────────────────── */
+  /* ─── Chargement initial ─── */
   useEffect(() => {
     (async () => {
       setLoading(true); setError("");
       try {
-        /* Critères */
         const cR = await authFetch(CONFIG.API_CRITERES, token);
         const cD = cR.ok ? await cR.json() : [];
-        const c  = Array.isArray(cD)?cD:cD.results||[];
-        setCriteres(c);
+        setCriteres(Array.isArray(cD) ? cD : cD.results||[]);
 
-        /* Apprenants */
         const aR = await authFetch(CONFIG.API_APPRENANTS, token);
         const aD = aR.ok ? await aR.json() : [];
-        const a  = Array.isArray(aD)?aD:aD.results||[];
+        const a  = Array.isArray(aD) ? aD : aD.results||[];
 
-        /* Évaluations de cette session */
         const eR = await authFetch(`${CONFIG.API_EVALUATIONS}?session=${session.id}`, token);
         const eD = eR.ok ? await eR.json() : [];
-        const e  = Array.isArray(eD)?eD:eD.results||[];
+        const e  = Array.isArray(eD) ? eD : eD.results||[];
 
-        /* Construire la map notes par apprenant */
         const notesMap = {};
         e.forEach(ev => {
           if (!notesMap[ev.apprenant]) notesMap[ev.apprenant] = {};
           notesMap[ev.apprenant][ev.critere] = ev.note;
         });
-
-        setApprenants(a.map(ap => ({ ...ap, notes: notesMap[ap.id]||{} })));
+        setApprenants(a.filter(ap => notesMap[ap.id]).map(ap => ({ ...ap, notes:notesMap[ap.id], saved:true })));
       } catch { setError("Erreur de chargement."); }
       finally   { setLoading(false); }
     })();
   }, [session.id]);
 
-  /* ─────────────────────────────────────────
-     Ajouter un critère (rubrique)
-  ───────────────────────────────────────── */
+  /* ═══ RUBRIQUES ═══ */
+
   const addCritere = async () => {
-    if (!newCritere.trim()) return;
-    setAddingCritere(true);
+    if (!newCrit.trim()) return;
+    setAddingCrit(true);
     try {
-      const r = await authFetch(CONFIG.API_CRITERES, token, { method:"POST", body:JSON.stringify({ nom:newCritere.trim() }) });
-      if (r.ok||r.status===201) { const d=await r.json(); setCriteres(p=>[...p,d]); setNewCritere(""); }
+      const r = await authFetch(CONFIG.API_CRITERES, token, { method:"POST", body:JSON.stringify({ nom:newCrit.trim() }) });
+      if (r.ok||r.status===201) {
+        const d = await r.json();
+        setCriteres(p => [...p, d]);
+        setNewCrit("");
+        if (draft) setDraft(p => ({ ...p, notes:{ ...p.notes, [d.id]:null } }));
+      }
     } catch {}
-    finally { setAddingCritere(false); }
+    finally { setAddingCrit(false); }
   };
 
-  /* ─────────────────────────────────────────
-     Ajouter un apprenant
-  ───────────────────────────────────────── */
-  const addApprenant = async () => {
-    if (!newNom.trim()) return;
-    setAddingApp(true);
+  const startEditCrit = (c) => { setEditCrit(c.id); setEditCritVal(c.nom); };
+  const cancelEditCrit = () => { setEditCrit(null); setEditCritVal(""); };
+
+  const saveEditCrit = async (id) => {
+    if (!editCritVal.trim()) return;
+    setSavingCrit(id);
     try {
-      const r = await authFetch(CONFIG.API_APPRENANTS, token, { method:"POST", body:JSON.stringify({ nom:newNom.trim(), email:newEmail.trim()||undefined }) });
-      if (r.ok||r.status===201) { const d=await r.json(); setApprenants(p=>[...p,{...d,notes:{}}]); setNewNom(""); setNewEmail(""); }
+      const r = await authFetch(`${CONFIG.API_CRITERES}${id}/`, token, {
+        method:"PATCH", body:JSON.stringify({ nom:editCritVal.trim() }),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        setCriteres(p => p.map(c => c.id===id ? d : c));
+        cancelEditCrit();
+      }
     } catch {}
-    finally { setAddingApp(false); }
+    finally { setSavingCrit(null); }
   };
 
-  /* ─────────────────────────────────────────
-     Changer une note dans la grille
-  ───────────────────────────────────────── */
-  const setNote = (appId, critId, note) => {
-    setApprenants(p => p.map(a => a.id===appId ? { ...a, notes:{ ...a.notes, [critId]:note } } : a));
-  };
-
-  /* ─────────────────────────────────────────
-     Enregistrer les évaluations d'un apprenant
-  ───────────────────────────────────────── */
-  const saveApprenant = async (app) => {
-    setSavingApp(app.id);
+  const deleteCrit = async (id) => {
+    setDeletingCrit(id); setConfirmDel(null);
     try {
-      await Promise.all(criteres.map(c => {
-        const note = app.notes[c.id];
-        if (!note) return Promise.resolve();
-        return authFetch(CONFIG.API_EVALUATIONS, token, {
-          method:"POST",
-          body:JSON.stringify({ session:session.id, apprenant:app.id, critere:c.id, note }),
-        });
-      }));
+      const r = await authFetch(`${CONFIG.API_CRITERES}${id}/`, token, { method:"DELETE" });
+      if (r.ok||r.status===204) {
+        setCriteres(p => p.filter(c => c.id!==id));
+        // Retirer cette rubrique du draft si ouvert
+        if (draft) setDraft(p => { const n={...p.notes}; delete n[id]; return {...p,notes:n}; });
+      }
+    } catch {}
+    finally { setDeletingCrit(null); }
+  };
+
+  /* ═══ APPRENANTS ═══ */
+
+  const openDraft = () => { setDraft({ notes:{} }); setDraftNom(""); setDraftEmail(""); };
+  const setDraftNote = (critId, note) => setDraft(p => ({ ...p, notes:{ ...p.notes, [critId]:note } }));
+
+  const saveDraft = async () => {
+    if (!draftNom.trim()) return;
+    setSavingDraft(true);
+    try {
+      const aR = await authFetch(CONFIG.API_APPRENANTS, token, {
+        method:"POST", body:JSON.stringify({ nom:draftNom.trim(), email:draftEmail.trim()||undefined }),
+      });
+      if (!aR.ok && aR.status!==201) return;
+      const apprenant = await aR.json();
+      await Promise.all(
+        criteres.filter(c => draft.notes[c.id]).map(c =>
+          authFetch(CONFIG.API_EVALUATIONS, token, {
+            method:"POST",
+            body:JSON.stringify({ session:session.id, apprenant:apprenant.id, critere:c.id, note:draft.notes[c.id] }),
+          })
+        )
+      );
+      setApprenants(p => [...p, { ...apprenant, notes:draft.notes, saved:true }]);
+      setDraft(null); setDraftNom(""); setDraftEmail("");
+    } catch {}
+    finally { setSavingDraft(false); }
+  };
+
+  const startEditApp = (a) => { setEditApp(a.id); setEditAppVal({ nom:a.nom, email:a.email||"" }); };
+  const cancelEditApp = () => { setEditApp(null); setEditAppVal({ nom:"", email:"" }); };
+
+  const saveEditApp = async (id) => {
+    if (!editAppVal.nom.trim()) return;
+    setSavingApp(id);
+    try {
+      const r = await authFetch(`${CONFIG.API_APPRENANTS}${id}/`, token, {
+        method:"PATCH", body:JSON.stringify({ nom:editAppVal.nom.trim(), email:editAppVal.email.trim()||undefined }),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        setApprenants(p => p.map(a => a.id===id ? { ...a, nom:d.nom, email:d.email } : a));
+        cancelEditApp();
+      }
     } catch {}
     finally { setSavingApp(null); }
   };
 
-  /* ─────────────────────────────────────────
-     Charger les résultats
-  ───────────────────────────────────────── */
+  const deleteApp = async (id) => {
+    setDeletingApp(id); setConfirmDel(null);
+    try {
+      const r = await authFetch(`${CONFIG.API_APPRENANTS}${id}/`, token, { method:"DELETE" });
+      if (r.ok||r.status===204) setApprenants(p => p.filter(a => a.id!==id));
+    } catch {}
+    finally { setDeletingApp(null); }
+  };
+
+  /* ═══ RÉSULTATS / EXPORTS ═══ */
+
   const loadResults = async () => {
     setLoadingRes(true);
     try {
       const r = await authFetch(CONFIG.API_RESULTS(session.id), token);
-      if (r.ok) { const d=await r.json(); setResults(d); setTab("resultats"); }
+      if (r.ok) { setResults(await r.json()); setTab("resultats"); }
     } catch {}
     finally { setLoadingRes(false); }
   };
-
-  /* ─────────────────────────────────────────
-     Exports
-  ───────────────────────────────────────── */
   const dlPdfGlobal = async () => {
     setExporting("pdf");
     const r = await fetch(`${CONFIG.BASE_URL}${CONFIG.API_PDF_GLOBAL(session.id)}`,{headers:{Authorization:`Bearer ${token}`}});
@@ -364,26 +428,51 @@ function SessionDetail({ token, session, onBack }) {
     setGraphLoading(false);
   };
 
-  /* ─────────────────────────────────────────
-     Stats locales (calcul frontend)
-  ───────────────────────────────────────── */
+  /* ─── Stats locales ─── */
   const localResults = apprenants.map(a => {
-    const total   = Object.values(a.notes).reduce((s,n) => s+(NOTE_MAP[n]||0), 0);
-    const maxPts  = criteres.length * 75;
-    const pct     = maxPts > 0 ? Math.round((total/maxPts)*100) : 0;
+    const total  = criteres.reduce((s,c) => s+(NOTE_MAP[a.notes[c.id]]||0), 0);
+    const maxPts = criteres.length * 75;
+    const pct    = maxPts>0 ? Math.round((total/maxPts)*100) : 0;
     return { id:a.id, nom:a.nom, total, maxPts, pct };
-  }).filter(r => r.total > 0);
-
+  });
+  const draftTotal  = draft ? criteres.reduce((s,c)=>s+(NOTE_MAP[draft.notes[c.id]]||0),0) : 0;
+  const draftMaxPts = criteres.length * 75;
+  const draftPct    = draftMaxPts>0 ? Math.round((draftTotal/draftMaxPts)*100) : 0;
+  const draftFilled = draft ? criteres.filter(c=>draft.notes[c.id]).length : 0;
+  const draftSc     = scoreStyle(draftPct);
   const avg    = localResults.length ? Math.round(localResults.reduce((s,r)=>s+r.pct,0)/localResults.length) : 0;
   const passed = localResults.filter(r=>r.pct>=50).length;
-
-  const fd = d=>d?new Date(d).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"}):"—";
 
   if (loading) return <Spin/>;
 
   return (
     <div style={{ animation:"fadeUp .3s ease" }}>
-      {/* ── En-tête session ── */}
+
+      {/* ── MODAL CONFIRMATION SUPPRESSION ── */}
+      {confirmDel && (
+        <div onClick={()=>setConfirmDel(null)} style={{ position:"fixed",inset:0,background:"rgba(13,27,94,0.4)",backdropFilter:"blur(4px)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:C.surface,borderRadius:20,padding:28,width:"100%",maxWidth:380,boxShadow:"0 24px 80px rgba(13,27,94,0.25)",border:`2px solid #FECDD3` }}>
+            <div style={{ width:48,height:48,borderRadius:14,background:"#FFF1F2",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}>
+              <AlertTriangle size={22} color={C.danger}/>
+            </div>
+            <p style={{ fontSize:16,fontWeight:800,color:C.navy,textAlign:"center",marginBottom:8 }}>Confirmer la suppression</p>
+            <p style={{ fontSize:13,color:C.textSub,textAlign:"center",marginBottom:22 }}>
+              Supprimer <strong>"{confirmDel.nom}"</strong> ? Cette action est irréversible.
+              {confirmDel.type==="app" && <><br/><span style={{fontSize:11,color:C.textMuted}}>Toutes ses évaluations seront aussi supprimées.</span></>}
+            </p>
+            <div style={{ display:"flex",gap:10 }}>
+              <button onClick={()=>setConfirmDel(null)} style={{ flex:1,padding:"11px",borderRadius:12,border:`1.5px solid ${C.iceBlue}`,background:C.surfaceAlt,color:C.textSub,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"'Syne',sans-serif" }}>Annuler</button>
+              <button
+                onClick={()=>confirmDel.type==="crit" ? deleteCrit(confirmDel.id) : deleteApp(confirmDel.id)}
+                style={{ flex:1,padding:"11px",borderRadius:12,border:"none",background:C.danger,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Syne',sans-serif" }}>
+                Supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── En-tête ── */}
       <div style={{ display:"flex",alignItems:"flex-start",gap:14,marginBottom:22 }}>
         <button onClick={onBack} style={{ width:38,height:38,borderRadius:10,background:C.surfaceAlt,border:`1.5px solid ${C.iceBlue}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,marginTop:2 }}>
           <ArrowLeft size={15} color={C.textSub}/>
@@ -391,8 +480,7 @@ function SessionDetail({ token, session, onBack }) {
         <div style={{ flex:1 }}>
           <h1 style={{ fontSize:20,fontWeight:800,color:C.navy,lineHeight:1.2 }}>{session.theme}</h1>
           <div style={{ display:"flex",gap:12,marginTop:6,flexWrap:"wrap" }}>
-            <M icon={User}     t={session.formateur}/>
-            <M icon={MapPin}   t={session.lieu}/>
+            <M icon={User} t={session.formateur}/><M icon={MapPin} t={session.lieu}/>
             <M icon={Calendar} t={`${fd(session.periode_debut)} → ${fd(session.periode_fin)}`}/>
             {session.organisme&&<M icon={Building2} t={session.organisme}/>}
           </div>
@@ -403,181 +491,340 @@ function SessionDetail({ token, session, onBack }) {
 
       {/* ── Onglets ── */}
       <div style={{ display:"flex",gap:4,marginBottom:20,background:C.surfaceAlt,borderRadius:12,padding:4,width:"fit-content",border:`1px solid ${C.iceBlue}` }}>
-        {[{id:"saisie",label:"Saisie des évaluations",icon:Edit3},{id:"resultats",label:"Résultats",icon:BarChart3}].map(t=>(
-          <button key={t.id} onClick={()=>t.id==="resultats"?loadResults():setTab(t.id)}
-            style={{ display:"flex",alignItems:"center",gap:7,padding:"9px 18px",borderRadius:9,border:"none",background:tab===t.id?C.surface:"transparent",color:tab===t.id?C.navy:C.textSub,fontSize:13,fontWeight:tab===t.id?800:600,cursor:"pointer",fontFamily:"'Syne',sans-serif",boxShadow:tab===t.id?`0 2px 8px ${C.shadow}`:"none",transition:"all .15s" }}>
-            {t.id==="resultats"&&loadingRes?<Loader2 size={13} style={{animation:"spin 1s linear infinite"}}/>:<t.icon size={13}/>}{t.label}
+        {[{id:"saisie",label:"Saisie",icon:Edit3},{id:"resultats",label:"Résultats",icon:BarChart3}].map(t=>(
+          <button key={t.id} onClick={()=>t.id==="resultats"?loadResults():setTab("saisie")}
+            style={{ display:"flex",alignItems:"center",gap:7,padding:"9px 20px",borderRadius:9,border:"none",background:tab===t.id?C.surface:"transparent",color:tab===t.id?C.navy:C.textSub,fontSize:13,fontWeight:tab===t.id?800:600,cursor:"pointer",fontFamily:"'Syne',sans-serif",boxShadow:tab===t.id?`0 2px 8px ${C.shadow}`:"none",transition:"all .15s" }}>
+            {t.id==="resultats"&&loadingRes?<Loader2 size={13} style={{animation:"spin 1s linear infinite"}}/>:<t.icon size={13}/>} {t.label}
           </button>
         ))}
       </div>
 
-      {/* ══════════════════════════════════════
+      {/* ════════════════════════════════
           ONGLET SAISIE
-      ══════════════════════════════════════ */}
+      ════════════════════════════════ */}
       {tab==="saisie" && (
-        <div>
-          {/* ── Bloc rubriques ── */}
-          <div style={{ background:C.surface,borderRadius:18,border:"1.5px solid #EEF2FF",marginBottom:16,overflow:"hidden" }}>
-            <div style={{ padding:"14px 20px",borderBottom:"1px solid #EEF2FF",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10 }}>
-              <SH icon={BookOpen} title="Rubriques d'évaluation" color={C.blue}/>
-              {/* Ajouter rubrique inline */}
-              <div style={{ display:"flex",gap:8,alignItems:"center" }}>
-                <input
-                  value={newCritere}
-                  onChange={e=>setNewCritere(e.target.value)}
-                  onKeyDown={e=>e.key==="Enter"&&(e.preventDefault(),addCritere())}
-                  placeholder="Nouvelle rubrique…"
-                  style={{ padding:"7px 12px",borderRadius:9,border:`1.5px solid ${C.iceBlue}`,fontSize:12,color:C.navy,fontFamily:"'Syne',sans-serif",outline:"none",width:200 }}
-                />
-                <button onClick={addCritere} disabled={addingCritere||!newCritere.trim()}
-                  style={{ display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:9,border:"none",background:newCritere.trim()?`linear-gradient(135deg,${C.navy},${C.blue})`:C.textMuted,color:"#fff",fontSize:12,fontWeight:700,cursor:newCritere.trim()?"pointer":"not-allowed",fontFamily:"'Syne',sans-serif" }}>
-                  {addingCritere?<Loader2 size={12} style={{animation:"spin 1s linear infinite"}}/>:<Plus size={12}/>} Ajouter
-                </button>
-              </div>
+        <div style={{ display:"grid",gridTemplateColumns:"280px 1fr",gap:16,alignItems:"start" }}>
+
+          {/* ─── Colonne gauche : Rubriques ─── */}
+          <div style={{ background:C.surface,borderRadius:18,border:"1.5px solid #EEF2FF",overflow:"hidden",position:"sticky",top:16 }}>
+            <div style={{ padding:"14px 16px",borderBottom:"1px solid #EEF2FF" }}>
+              <SH icon={BookOpen} title="Rubriques" color={C.blue}/>
+              <p style={{ fontSize:11,color:C.textMuted,marginTop:5 }}>{criteres.length} rubrique{criteres.length!==1?"s":""} · communes à tous</p>
             </div>
-            {criteres.length===0 ? (
-              <p style={{ padding:"16px 20px",fontSize:12,color:C.textMuted }}>Ajoutez au moins une rubrique pour pouvoir noter les apprenants.</p>
-            ) : (
-              <div style={{ padding:"12px 20px",display:"flex",flexWrap:"wrap",gap:8 }}>
-                {criteres.map((c,i)=>(
-                  <span key={c.id} style={{ fontSize:12,fontWeight:700,padding:"5px 14px",borderRadius:20,background:`${C.blue}10`,color:C.blue,border:`1px solid ${C.iceBlue}` }}>
-                    {i+1}. {c.nom}
-                  </span>
-                ))}
-              </div>
-            )}
+
+            {/* Liste rubriques avec edit/delete */}
+            <div style={{ maxHeight:340,overflowY:"auto" }}>
+              {criteres.length===0 ? (
+                <p style={{ padding:"14px 16px",fontSize:12,color:C.textMuted }}>Aucune rubrique. Ajoutez-en ci-dessous.</p>
+              ) : criteres.map((c,i) => (
+                <div key={c.id} style={{ padding:"9px 14px",borderBottom:i<criteres.length-1?"1px solid #F5F7FF":"none" }}>
+                  {editCrit===c.id ? (
+                    /* ── Mode édition rubrique ── */
+                    <div style={{ display:"flex",gap:6,alignItems:"center" }}>
+                      <input
+                        autoFocus
+                        value={editCritVal}
+                        onChange={e=>setEditCritVal(e.target.value)}
+                        onKeyDown={e=>{ if(e.key==="Enter") saveEditCrit(c.id); if(e.key==="Escape") cancelEditCrit(); }}
+                        style={{ flex:1,padding:"6px 9px",borderRadius:7,border:`1.5px solid ${C.blue}`,fontSize:12,color:C.navy,fontFamily:"'Syne',sans-serif",outline:"none",boxShadow:`0 0 0 3px ${C.blue}15` }}
+                      />
+                      <button onClick={()=>saveEditCrit(c.id)} disabled={savingCrit===c.id}
+                        style={{ width:28,height:28,borderRadius:7,border:"none",background:C.blue,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
+                        {savingCrit===c.id?<Loader2 size={11} color="#fff" style={{animation:"spin 1s linear infinite"}}/>:<CheckCircle2 size={11} color="#fff"/>}
+                      </button>
+                      <button onClick={cancelEditCrit} style={{ width:28,height:28,borderRadius:7,border:`1px solid ${C.iceBlue}`,background:C.surfaceAlt,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
+                        <X size={11} color={C.textSub}/>
+                      </button>
+                    </div>
+                  ) : (
+                    /* ── Mode affichage rubrique ── */
+                    <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                      <span style={{ width:20,height:20,borderRadius:5,background:`${C.blue}14`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:C.blue,flexShrink:0 }}>{i+1}</span>
+                      <p style={{ flex:1,fontSize:12,fontWeight:700,color:C.navy,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{c.nom}</p>
+                      {/* Bouton modifier */}
+                      <button onClick={()=>startEditCrit(c)}
+                        style={{ width:26,height:26,borderRadius:7,border:`1px solid ${C.iceBlue}`,background:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,transition:"all .12s" }}
+                        onMouseEnter={e=>{e.currentTarget.style.background=`${C.blue}14`;e.currentTarget.style.borderColor=C.blue;}}
+                        onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor=C.iceBlue;}}>
+                        <Edit3 size={10} color={C.textSub}/>
+                      </button>
+                      {/* Bouton supprimer */}
+                      <button onClick={()=>setConfirmDel({type:"crit",id:c.id,nom:c.nom})}
+                        disabled={deletingCrit===c.id}
+                        style={{ width:26,height:26,borderRadius:7,border:"1px solid #FECDD3",background:"#FFF5F5",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,transition:"all .12s" }}
+                        onMouseEnter={e=>{e.currentTarget.style.background="#FECDD3";}}
+                        onMouseLeave={e=>{e.currentTarget.style.background="#FFF5F5";}}>
+                        {deletingCrit===c.id?<Loader2 size={10} color={C.danger} style={{animation:"spin 1s linear infinite"}}/>:<Trash2 size={10} color={C.danger}/>}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Ajouter rubrique */}
+            <div style={{ padding:"12px 14px",borderTop:"1px solid #EEF2FF" }}>
+              <input
+                value={newCrit}
+                onChange={e=>setNewCrit(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&(e.preventDefault(),addCritere())}
+                placeholder="Nouvelle rubrique…"
+                style={{ width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.iceBlue}`,fontSize:12,color:C.navy,fontFamily:"'Syne',sans-serif",outline:"none",boxSizing:"border-box",marginBottom:8 }}
+              />
+              <button onClick={addCritere} disabled={addingCrit||!newCrit.trim()}
+                style={{ width:"100%",padding:"8px",borderRadius:8,border:"none",background:newCrit.trim()?`linear-gradient(135deg,${C.navy},${C.blue})`:C.textMuted,color:"#fff",fontSize:12,fontWeight:700,cursor:newCrit.trim()?"pointer":"not-allowed",fontFamily:"'Syne',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+                {addingCrit?<Loader2 size={12} style={{animation:"spin 1s linear infinite"}}/>:<Plus size={12}/>} Ajouter
+              </button>
+            </div>
           </div>
 
-          {/* ── Bloc apprenants + grille de notes ── */}
-          <div style={{ background:C.surface,borderRadius:18,border:"1.5px solid #EEF2FF",overflow:"hidden" }}>
-            {/* Header + ajout apprenant */}
-            <div style={{ padding:"14px 20px",borderBottom:"1px solid #EEF2FF",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10 }}>
-              <SH icon={Users} title="Apprenants" color={C.purple}/>
-              <div style={{ display:"flex",gap:8,alignItems:"center",flexWrap:"wrap" }}>
-                <input
-                  value={newNom}
-                  onChange={e=>setNewNom(e.target.value)}
-                  onKeyDown={e=>e.key==="Enter"&&(e.preventDefault(),addApprenant())}
-                  placeholder="Nom de l'apprenant *"
-                  style={{ padding:"7px 12px",borderRadius:9,border:`1.5px solid ${C.iceBlue}`,fontSize:12,color:C.navy,fontFamily:"'Syne',sans-serif",outline:"none",width:180 }}
-                />
-                <input
-                  value={newEmail}
-                  onChange={e=>setNewEmail(e.target.value)}
-                  placeholder="Email (optionnel)"
-                  style={{ padding:"7px 12px",borderRadius:9,border:`1.5px solid ${C.iceBlue}`,fontSize:12,color:C.navy,fontFamily:"'Syne',sans-serif",outline:"none",width:160 }}
-                />
-                <button onClick={addApprenant} disabled={addingApp||!newNom.trim()}
-                  style={{ display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:9,border:"none",background:newNom.trim()?`linear-gradient(135deg,${C.navy},${C.blue})`:C.textMuted,color:"#fff",fontSize:12,fontWeight:700,cursor:newNom.trim()?"pointer":"not-allowed",fontFamily:"'Syne',sans-serif" }}>
-                  {addingApp?<Loader2 size={12} style={{animation:"spin 1s linear infinite"}}/>:<Plus size={12}/>} Ajouter
-                </button>
-              </div>
-            </div>
+          {/* ─── Colonne droite : Apprenants ─── */}
+          <div>
+            {/* Bouton évaluer */}
+            {!draft && (
+              <button onClick={openDraft} disabled={criteres.length===0}
+                style={{ width:"100%",marginBottom:16,padding:"14px",borderRadius:14,border:`2px dashed ${criteres.length>0?C.blue:C.iceBlue}`,background:criteres.length>0?`${C.blue}06`:"transparent",color:criteres.length>0?C.blue:C.textMuted,fontSize:13,fontWeight:700,cursor:criteres.length>0?"pointer":"not-allowed",fontFamily:"'Syne',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"all .15s" }}
+                onMouseEnter={e=>{ if(criteres.length>0){e.currentTarget.style.background=`${C.blue}12`;e.currentTarget.style.borderStyle="solid";}}}
+                onMouseLeave={e=>{ e.currentTarget.style.background=criteres.length>0?`${C.blue}06`:"transparent";e.currentTarget.style.borderStyle="dashed";}}>
+                <Plus size={16}/> {criteres.length===0?"Ajoutez d'abord des rubriques":"Évaluer un apprenant"}
+              </button>
+            )}
 
-            {apprenants.length===0 ? (
-              <p style={{ padding:"20px",fontSize:13,color:C.textMuted }}>Ajoutez un apprenant ci-dessus pour commencer la saisie.</p>
-            ) : criteres.length===0 ? (
-              <p style={{ padding:"20px",fontSize:13,color:C.textMuted }}>Ajoutez des rubriques avant de saisir les notes.</p>
+            {/* ── Formulaire draft ── */}
+            {draft && (
+              <div style={{ background:C.surface,borderRadius:18,border:`2px solid ${C.blue}`,marginBottom:16,overflow:"hidden",boxShadow:`0 4px 24px ${C.shadow}` }}>
+                {/* Header */}
+                <div style={{ padding:"16px 20px",borderBottom:"1px solid #EEF2FF",background:`${C.blue}06`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap" }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:10,flex:1,flexWrap:"wrap" }}>
+                    <input autoFocus value={draftNom} onChange={e=>setDraftNom(e.target.value)} placeholder="Nom de l'apprenant *"
+                      style={{ padding:"9px 14px",borderRadius:10,border:`1.5px solid ${C.iceBlue}`,fontSize:13,fontWeight:700,color:C.navy,fontFamily:"'Syne',sans-serif",outline:"none",width:200 }}/>
+                    <input value={draftEmail} onChange={e=>setDraftEmail(e.target.value)} placeholder="Email (optionnel)"
+                      style={{ padding:"9px 14px",borderRadius:10,border:`1.5px solid ${C.iceBlue}`,fontSize:13,color:C.navy,fontFamily:"'Syne',sans-serif",outline:"none",width:190 }}/>
+                  </div>
+                  {draftFilled>0 && (
+                    <div style={{ display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0 }}>
+                      <span style={{ fontSize:22,fontWeight:800,color:draftSc.text,lineHeight:1 }}>{draftPct}%</span>
+                      <span style={{ fontSize:10,fontWeight:700,color:draftSc.text }}>{draftTotal}/{draftMaxPts} pts</span>
+                    </div>
+                  )}
+                  <button onClick={()=>setDraft(null)} style={{ width:30,height:30,borderRadius:8,background:C.surfaceAlt,border:`1px solid ${C.iceBlue}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
+                    <X size={13} color={C.textSub}/>
+                  </button>
+                </div>
+                {/* Grille notes */}
+                {criteres.map((c,i)=>{
+                  const cur = draft.notes[c.id];
+                  return (
+                    <div key={c.id} style={{ display:"flex",alignItems:"center",gap:12,padding:"13px 20px",borderBottom:i<criteres.length-1?"1px solid #F0F4FF":"none",flexWrap:"wrap" }}>
+                      <div style={{ display:"flex",alignItems:"center",gap:8,flex:"0 0 200px",minWidth:0 }}>
+                        <span style={{ width:22,height:22,borderRadius:6,background:`${C.blue}14`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:C.blue,flexShrink:0 }}>{i+1}</span>
+                        <p style={{ fontSize:13,fontWeight:700,color:C.navy,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{c.nom}</p>
+                      </div>
+                      <div style={{ display:"flex",gap:6,flex:1 }}>
+                        {[1,2,3].map(n=>{
+                          const sel=cur===n; const nc=NOTE_COLORS[n];
+                          return (
+                            <button key={n} type="button" onClick={()=>setDraftNote(c.id,n)}
+                              style={{ flex:1,padding:"9px 6px",borderRadius:10,border:`2px solid ${sel?nc.text:C.iceBlue}`,background:sel?nc.bg:"#FAFBFF",color:sel?nc.text:C.textMuted,fontSize:11,fontWeight:sel?800:600,cursor:"pointer",fontFamily:"'Syne',sans-serif",transition:"all .12s",textAlign:"center",boxShadow:sel?`0 2px 8px ${nc.text}25`:"none" }}>
+                              {NOTE_LABELS[n]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ width:54,textAlign:"right",flexShrink:0 }}>
+                        {cur?<span style={{ fontSize:13,fontWeight:800,color:NOTE_COLORS[cur].text }}>{NOTE_MAP[cur]} pts</span>:<span style={{ fontSize:11,color:C.textMuted }}>— pts</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+                {/* Footer total */}
+                <div style={{ padding:"14px 20px",background:`${C.blue}05`,borderTop:"2px solid #EEF2FF",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12 }}>
+                  <div>
+                    <p style={{ fontSize:12,color:C.textMuted,fontWeight:600 }}>{draftFilled}/{criteres.length} rubriques évaluées</p>
+                    <p style={{ fontSize:14,fontWeight:800,color:C.navy,marginTop:2 }}>Total : {draftTotal} / {draftMaxPts} pts</p>
+                  </div>
+                  <div style={{ display:"flex",alignItems:"center",gap:12 }}>
+                    <div style={{ textAlign:"center" }}>
+                      <div style={{ width:120,height:8,borderRadius:4,background:"#EEF2FF",overflow:"hidden",marginBottom:4 }}>
+                        <div style={{ width:`${draftPct}%`,height:"100%",background:draftPct>=75?C.success:draftPct>=50?C.accent:draftPct>0?C.danger:"transparent",borderRadius:4,transition:"width .3s" }}/>
+                      </div>
+                      <span style={{ fontSize:11,color:draftSc.text,fontWeight:700 }}>{draftFilled>0?draftSc.label:"En attente"}</span>
+                    </div>
+                    <div style={{ width:54,height:54,borderRadius:14,background:draftFilled>0?draftSc.bg:C.surfaceAlt,border:`2px solid ${draftFilled>0?draftSc.text:C.iceBlue}`,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                      <span style={{ fontSize:16,fontWeight:800,color:draftFilled>0?draftSc.text:C.textMuted }}>{draftFilled>0?`${draftPct}%`:"—"}</span>
+                    </div>
+                  </div>
+                  <button onClick={saveDraft} disabled={savingDraft||!draftNom.trim()}
+                    style={{ display:"flex",alignItems:"center",gap:8,padding:"11px 22px",borderRadius:12,border:"none",background:draftNom.trim()&&!savingDraft?`linear-gradient(135deg,${C.navy},${C.blue})`:C.textMuted,color:"#fff",fontSize:13,fontWeight:800,cursor:draftNom.trim()&&!savingDraft?"pointer":"not-allowed",fontFamily:"'Syne',sans-serif" }}>
+                    {savingDraft?<><Loader2 size={14} style={{animation:"spin 1s linear infinite"}}/> Enregistrement…</>:<><CheckCircle2 size={14}/> Enregistrer</>}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── Cartes apprenants évalués ── */}
+            {apprenants.length===0 && !draft ? (
+              <div style={{ background:C.surface,borderRadius:16,border:"1.5px solid #EEF2FF",padding:"40px 20px",textAlign:"center",color:C.textMuted }}>
+                <Users size={36} style={{ margin:"0 auto 10px",opacity:.2,display:"block" }}/>
+                <p style={{ fontWeight:700,fontSize:13 }}>Aucun apprenant évalué pour l'instant.</p>
+              </div>
             ) : (
-              <div>
-                {apprenants.map((app,ai)=>(
-                  <AppRow key={app.id} app={app} criteres={criteres} ai={ai} total={apprenants.length}
-                    onNote={(cId,n)=>setNote(app.id,cId,n)}
-                    onSave={()=>saveApprenant(app)}
-                    saving={savingApp===app.id}
-                  />
-                ))}
+              <div style={{ display:"grid",gap:10 }}>
+                {apprenants.map((a,i)=>{
+                  const total  = criteres.reduce((s,c)=>s+(NOTE_MAP[a.notes[c.id]]||0),0);
+                  const maxPts = criteres.length*75;
+                  const pct    = maxPts>0?Math.round((total/maxPts)*100):0;
+                  const sc     = scoreStyle(pct);
+                  const filled = criteres.filter(c=>a.notes[c.id]).length;
+
+                  return (
+                    <div key={a.id} style={{ background:C.surface,border:`1.5px solid ${editApp===a.id?C.blue:"#EEF2FF"}`,borderRadius:16,overflow:"hidden",transition:"border-color .15s" }}>
+
+                      {editApp===a.id ? (
+                        /* ── Mode édition apprenant ── */
+                        <div style={{ padding:"14px 18px",background:`${C.blue}05`,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap" }}>
+                          <input autoFocus value={editAppVal.nom} onChange={e=>setEditAppVal(p=>({...p,nom:e.target.value}))}
+                            onKeyDown={e=>{ if(e.key==="Enter") saveEditApp(a.id); if(e.key==="Escape") cancelEditApp(); }}
+                            placeholder="Nom *"
+                            style={{ padding:"8px 12px",borderRadius:9,border:`1.5px solid ${C.blue}`,fontSize:13,fontWeight:700,color:C.navy,fontFamily:"'Syne',sans-serif",outline:"none",width:180,boxShadow:`0 0 0 3px ${C.blue}15` }}/>
+                          <input value={editAppVal.email} onChange={e=>setEditAppVal(p=>({...p,email:e.target.value}))}
+                            placeholder="Email"
+                            style={{ padding:"8px 12px",borderRadius:9,border:`1.5px solid ${C.iceBlue}`,fontSize:13,color:C.navy,fontFamily:"'Syne',sans-serif",outline:"none",width:180 }}/>
+                          <div style={{ display:"flex",gap:8,marginLeft:"auto" }}>
+                            <button onClick={()=>saveEditApp(a.id)} disabled={savingApp===a.id||!editAppVal.nom.trim()}
+                              style={{ display:"flex",alignItems:"center",gap:6,padding:"8px 16px",borderRadius:9,border:"none",background:editAppVal.nom.trim()?C.blue:C.textMuted,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Syne',sans-serif" }}>
+                              {savingApp===a.id?<Loader2 size={12} style={{animation:"spin 1s linear infinite"}}/>:<CheckCircle2 size={12}/>} Sauvegarder
+                            </button>
+                            <button onClick={cancelEditApp}
+                              style={{ padding:"8px 14px",borderRadius:9,border:`1.5px solid ${C.iceBlue}`,background:C.surfaceAlt,color:C.textSub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Syne',sans-serif" }}>
+                              Annuler
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        /* ── Mode affichage apprenant ── */
+                        <div style={{ padding:"14px 18px",display:"flex",alignItems:"center",gap:14 }}>
+                          {/* Avatar */}
+                          <div style={{ width:40,height:40,borderRadius:12,background:`${C.blue}14`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                            <span style={{ fontSize:14,fontWeight:800,color:C.blue }}>
+                              {a.nom.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase()}
+                            </span>
+                          </div>
+                          {/* Infos */}
+                          <div style={{ flex:1,minWidth:0 }}>
+                            <p style={{ fontSize:14,fontWeight:800,color:C.navy }}>{a.nom}</p>
+                            <p style={{ fontSize:11,color:C.textMuted,marginTop:1 }}>
+                              {total}/{maxPts} pts · {filled}/{criteres.length} rubriques
+                              {a.email&&<> · {a.email}</>}
+                            </p>
+                          </div>
+                          {/* Score */}
+                          <div style={{ display:"flex",alignItems:"center",gap:8,flexShrink:0 }}>
+                            <div style={{ width:60,height:6,borderRadius:3,background:"#EEF2FF",overflow:"hidden" }}>
+                              <div style={{ width:`${pct}%`,height:"100%",background:sc.text,borderRadius:3 }}/>
+                            </div>
+                            <span style={{ fontSize:13,fontWeight:800,padding:"4px 12px",borderRadius:20,background:sc.bg,color:sc.text,border:`1px solid ${sc.border}` }}>{pct}%</span>
+                          </div>
+                          <span style={{ fontSize:11,fontWeight:700,color:sc.text,minWidth:100,flexShrink:0 }}>{sc.label}</span>
+                          {/* Actions */}
+                          <div style={{ display:"flex",gap:6,flexShrink:0 }}>
+                            {/* PDF */}
+                            <button onClick={()=>dlPdfApp(a.id,a.nom)} title="Rapport PDF"
+                              style={{ width:30,height:30,borderRadius:8,border:"1px solid #FECDD3",background:"#FFF5F5",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"all .12s" }}
+                              onMouseEnter={e=>{e.currentTarget.style.background="#FECDD3";}}
+                              onMouseLeave={e=>{e.currentTarget.style.background="#FFF5F5";}}>
+                              <FileText size={12} color={C.danger}/>
+                            </button>
+                            {/* Modifier */}
+                            <button onClick={()=>startEditApp(a)} title="Modifier"
+                              style={{ width:30,height:30,borderRadius:8,border:`1px solid ${C.iceBlue}`,background:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"all .12s" }}
+                              onMouseEnter={e=>{e.currentTarget.style.background=`${C.blue}14`;e.currentTarget.style.borderColor=C.blue;}}
+                              onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor=C.iceBlue;}}>
+                              <Edit3 size={12} color={C.textSub}/>
+                            </button>
+                            {/* Supprimer */}
+                            <button onClick={()=>setConfirmDel({type:"app",id:a.id,nom:a.nom})}
+                              disabled={deletingApp===a.id}
+                              title="Supprimer"
+                              style={{ width:30,height:30,borderRadius:8,border:"1px solid #FECDD3",background:"#FFF5F5",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"all .12s" }}
+                              onMouseEnter={e=>{e.currentTarget.style.background=C.danger;e.currentTarget.style.borderColor=C.danger;}}
+                              onMouseLeave={e=>{e.currentTarget.style.background="#FFF5F5";e.currentTarget.style.borderColor="#FECDD3";}}>
+                              {deletingApp===a.id?<Loader2 size={12} color={C.danger} style={{animation:"spin 1s linear infinite"}}/>:<Trash2 size={12} color={C.danger}/>}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* ══════════════════════════════════════
+      {/* ════════════════════════════════
           ONGLET RÉSULTATS
-      ══════════════════════════════════════ */}
+      ════════════════════════════════ */}
       {tab==="resultats" && (
         <div>
-          {/* KPIs */}
           {localResults.length>0 && (
             <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:20 }}>
               {[
-                { label:"Taux global",         value:`${avg}%`,                        icon:TrendingUp,   color:C.blue    },
+                { label:"Taux global",         value:`${avg}%`,                          icon:TrendingUp,   color:C.blue    },
                 { label:"Satisfaisants ≥50%",  value:`${passed}/${localResults.length}`, icon:CheckCircle2, color:C.success },
-                { label:"Apprenants évalués",  value:localResults.length,              icon:Users,        color:C.purple  },
-                { label:"Rubriques évaluées",  value:criteres.length,                  icon:Star,         color:C.accent  },
+                { label:"Apprenants évalués",  value:localResults.length,                icon:Users,        color:C.purple  },
+                { label:"Rubriques évaluées",  value:criteres.length,                    icon:Star,         color:C.accent  },
               ].map((k,i)=>(
-                <div key={i} style={{ background:C.surface,borderRadius:14,padding:"14px 16px",border:"1.5px solid #EEF2FF",boxShadow:"0 2px 12px rgba(13,27,94,0.06)" }}>
-                  <div style={{ width:32,height:32,borderRadius:9,background:`${k.color}14`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:9 }}>
-                    <k.icon size={15} color={k.color}/>
-                  </div>
+                <div key={i} style={{ background:C.surface,borderRadius:14,padding:"14px 16px",border:"1.5px solid #EEF2FF" }}>
+                  <div style={{ width:32,height:32,borderRadius:9,background:`${k.color}14`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:9 }}><k.icon size={15} color={k.color}/></div>
                   <p style={{ fontSize:22,fontWeight:800,color:C.navy,lineHeight:1 }}>{k.value}</p>
                   <p style={{ fontSize:11,color:C.textMuted,marginTop:3 }}>{k.label}</p>
                 </div>
               ))}
             </div>
           )}
-
-          {/* Exports */}
           <div style={{ display:"flex",gap:10,marginBottom:16,flexWrap:"wrap" }}>
-            <EBtn icon={FileText}        label="PDF Global"    color="#E53935" loading={exporting==="pdf"}   onClick={dlPdfGlobal}/>
-            <EBtn icon={FileSpreadsheet} label="Export Excel"  color="#15803D" loading={exporting==="excel"} onClick={dlExcel}/>
+            <EBtn icon={FileText}        label="PDF Global"   color="#E53935" loading={exporting==="pdf"}   onClick={dlPdfGlobal}/>
+            <EBtn icon={FileSpreadsheet} label="Export Excel" color="#15803D" loading={exporting==="excel"} onClick={dlExcel}/>
             <EBtn icon={ImageIcon}       label={graphUrl?"Masquer graphique":"Voir graphique"} color={C.purple} loading={graphLoading} onClick={loadGraph} active={!!graphUrl}/>
           </div>
-
-          {/* Graphique */}
           {graphUrl && (
             <div style={{ background:C.surface,border:"1.5px solid #EEF2FF",borderRadius:16,padding:20,marginBottom:16 }}>
               <img src={graphUrl} alt="Graphique" style={{ maxWidth:"100%",borderRadius:10,display:"block",margin:"0 auto" }}/>
             </div>
           )}
-
-          {/* Tableau résultats */}
           <div style={{ background:C.surface,border:"1.5px solid #EEF2FF",borderRadius:18,overflow:"hidden" }}>
-            <div style={{ padding:"14px 20px",borderBottom:"1px solid #EEF2FF" }}>
-              <SH icon={BarChart3} title="Résultats par apprenant" color={C.blue}/>
-            </div>
-
-            {localResults.length===0 ? (
-              <Empty label="Aucune note saisie. Revenez à la Saisie pour entrer les notes."/>
-            ) : (
+            <div style={{ padding:"14px 20px",borderBottom:"1px solid #EEF2FF" }}><SH icon={BarChart3} title="Résultats par apprenant" color={C.blue}/></div>
+            {localResults.length===0 ? <Empty label="Aucune note saisie. Revenez à la Saisie."/> : (
               <div>
-                {/* Ligne taux global */}
-                <div style={{ padding:"12px 20px",background:`${C.blue}08`,borderBottom:"2px solid #EEF2FF",display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+                <div style={{ padding:"12px 20px",background:`${C.blue}07`,borderBottom:"2px solid #EEF2FF",display:"flex",alignItems:"center",justifyContent:"space-between" }}>
                   <span style={{ fontSize:13,fontWeight:800,color:C.navy }}>Taux global de satisfaction</span>
                   <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-                    <div style={{ width:100,height:8,borderRadius:4,background:"#EEF2FF",overflow:"hidden" }}>
+                    <div style={{ width:110,height:7,borderRadius:4,background:"#EEF2FF",overflow:"hidden" }}>
                       <div style={{ width:`${avg}%`,height:"100%",background:avg>=75?C.success:avg>=50?C.accent:C.danger,borderRadius:4 }}/>
                     </div>
-                    <span style={{ fontSize:16,fontWeight:800,color:avg>=75?C.success:avg>=50?C.accent:C.danger }}>{avg}%</span>
+                    <span style={{ fontSize:18,fontWeight:800,color:avg>=75?C.success:avg>=50?C.accent:C.danger }}>{avg}%</span>
                   </div>
                 </div>
-
-                {/* Lignes apprenants */}
-                {localResults.sort((a,b)=>b.pct-a.pct).map((r,i)=>{
-                  const sc = scoreStyle(r.pct);
+                {[...localResults].sort((a,b)=>b.pct-a.pct).map((r,i)=>{
+                  const sc=scoreStyle(r.pct);
                   return (
-                    <div key={r.id} style={{ padding:"14px 20px",display:"flex",alignItems:"center",gap:14,borderBottom:i<localResults.length-1?"1px solid #F0F4FF":"none",flexWrap:"wrap" }}>
-                      {/* Rang */}
-                      <div style={{ width:30,height:30,borderRadius:9,background:i<3?`${C.accent}18`:C.surfaceAlt,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-                        <span style={{ fontSize:12,fontWeight:800,color:i<3?C.accent:C.textMuted }}>#{i+1}</span>
+                    <div key={r.id} style={{ padding:"13px 20px",display:"flex",alignItems:"center",gap:14,borderBottom:i<localResults.length-1?"1px solid #F0F4FF":"none",flexWrap:"wrap" }}>
+                      <div style={{ width:28,height:28,borderRadius:8,background:i<3?`${C.accent}18`:C.surfaceAlt,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                        <span style={{ fontSize:11,fontWeight:800,color:i<3?C.accent:C.textMuted }}>#{i+1}</span>
                       </div>
-                      {/* Nom */}
                       <p style={{ flex:1,fontSize:14,fontWeight:800,color:C.navy,minWidth:120 }}>{r.nom}</p>
-                      {/* Points */}
                       <span style={{ fontSize:12,color:C.textSub,fontWeight:600 }}>{r.total}/{r.maxPts} pts</span>
-                      {/* Barre */}
                       <div style={{ display:"flex",alignItems:"center",gap:8 }}>
                         <div style={{ width:80,height:6,borderRadius:3,background:"#EEF2FF",overflow:"hidden" }}>
                           <div style={{ width:`${r.pct}%`,height:"100%",background:sc.text,borderRadius:3 }}/>
                         </div>
                         <span style={{ fontSize:13,fontWeight:800,padding:"3px 12px",borderRadius:20,background:sc.bg,color:sc.text,border:`1px solid ${sc.border}` }}>{r.pct}%</span>
                       </div>
-                      {/* Label */}
-                      <span style={{ fontSize:11,fontWeight:700,color:sc.text }}>{sc.label}</span>
-                      {/* PDF apprenant */}
+                      <span style={{ fontSize:11,fontWeight:700,color:sc.text,minWidth:110 }}>{sc.label}</span>
                       <button onClick={()=>dlPdfApp(r.id,r.nom)}
-                        style={{ display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:8,border:`1px solid #FECDD3`,background:"#FFF1F2",color:C.danger,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Syne',sans-serif" }}>
+                        style={{ display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:8,border:"1px solid #FECDD3",background:"#FFF1F2",color:C.danger,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Syne',sans-serif" }}>
                         <FileText size={11}/> PDF
                       </button>
                     </div>
@@ -592,101 +839,6 @@ function SessionDetail({ token, session, onBack }) {
   );
 }
 
-/* ══════════════════════════════════════════════════════
-   LIGNE APPRENANT — grille de notation
-══════════════════════════════════════════════════════ */
-function AppRow({ app, criteres, ai, total, onNote, onSave, saving }) {
-  const [open, setOpen] = useState(true);
-
-  /* Score local en temps réel */
-  const pts    = Object.values(app.notes).reduce((s,n)=>s+(NOTE_MAP[n]||0),0);
-  const maxPts = criteres.length * 75;
-  const pct    = maxPts>0 ? Math.round((pts/maxPts)*100) : 0;
-  const sc     = scoreStyle(pct);
-  const filled = criteres.filter(c=>app.notes[c.id]).length;
-
-  return (
-    <div style={{ borderBottom:ai<total-1?"1px solid #EEF2FF":"none" }}>
-      {/* Header apprenant */}
-      <div
-        onClick={()=>setOpen(p=>!p)}
-        style={{ padding:"14px 20px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",transition:"background .15s" }}
-        onMouseEnter={e=>e.currentTarget.style.background="#F7F9FF"}
-        onMouseLeave={e=>e.currentTarget.style.background="transparent"}
-      >
-        {/* Avatar initiales */}
-        <div style={{ width:38,height:38,borderRadius:12,background:`${C.blue}14`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-          <span style={{ fontSize:13,fontWeight:800,color:C.blue }}>
-            {app.nom.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase()}
-          </span>
-        </div>
-
-        <div style={{ flex:1,minWidth:0 }}>
-          <p style={{ fontSize:14,fontWeight:800,color:C.navy }}>{app.nom}</p>
-          <p style={{ fontSize:11,color:C.textMuted,marginTop:2 }}>{filled}/{criteres.length} rubrique{criteres.length!==1?"s":""} remplie{criteres.length!==1?"s":""}</p>
-        </div>
-
-        {/* Score temps réel */}
-        {filled>0 && (
-          <span style={{ fontSize:13,fontWeight:800,padding:"4px 12px",borderRadius:20,background:sc.bg,color:sc.text,border:`1px solid ${sc.border}` }}>{pct}%</span>
-        )}
-
-        {/* Bouton enregistrer */}
-        <button
-          onClick={e=>{e.stopPropagation();onSave();}}
-          disabled={saving||filled===0}
-          style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:9,border:"none",background:filled>0&&!saving?`linear-gradient(135deg,${C.navy},${C.blue})`:C.textMuted,color:"#fff",fontSize:11,fontWeight:700,cursor:filled>0&&!saving?"pointer":"not-allowed",fontFamily:"'Syne',sans-serif",flexShrink:0 }}
-        >
-          {saving?<Loader2 size={11} style={{animation:"spin 1s linear infinite"}}/>:<Send size={11}/>}
-          {saving?"Sauvegarde…":"Enregistrer"}
-        </button>
-
-        {open?<ChevronUp size={14} color={C.textMuted}/>:<ChevronDown size={14} color={C.textMuted}/>}
-      </div>
-
-      {/* Grille critères */}
-      {open && (
-        <div style={{ padding:"4px 20px 16px 72px" }}>
-          {criteres.map((c,ci)=>{
-            const current = app.notes[c.id];
-            return (
-              <div key={c.id} style={{ display:"flex",alignItems:"center",gap:12,padding:"9px 0",borderBottom:ci<criteres.length-1?"1px dashed #EEF2FF":"none",flexWrap:"wrap" }}>
-                {/* Nom rubrique */}
-                <p style={{ width:220,fontSize:12,fontWeight:700,color:C.textSub,flexShrink:0 }}>
-                  <span style={{ fontSize:10,color:C.textMuted,marginRight:6 }}>#{ci+1}</span>{c.nom}
-                </p>
-                {/* Boutons notation */}
-                <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
-                  {[1,2,3].map(n=>{
-                    const sel = current===n;
-                    const nc  = NOTE_COLORS[n];
-                    return (
-                      <button key={n} type="button"
-                        onClick={()=>onNote(c.id,n)}
-                        style={{ padding:"6px 14px",borderRadius:8,border:`1.5px solid ${sel?nc.text:C.iceBlue}`,background:sel?nc.bg:"transparent",color:sel?nc.text:C.textMuted,fontSize:11,fontWeight:sel?800:600,cursor:"pointer",fontFamily:"'Syne',sans-serif",transition:"all .12s" }}>
-                        {NOTE_LABELS[n]}
-                      </button>
-                    );
-                  })}
-                </div>
-                {/* Points */}
-                {current && (
-                  <span style={{ fontSize:11,fontWeight:800,color:NOTE_COLORS[current].text,background:NOTE_COLORS[current].bg,padding:"3px 9px",borderRadius:14,border:`1px solid ${NOTE_COLORS[current].border}` }}>
-                    {NOTE_MAP[current]} pts
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════
-   MINI COMPOSANTS
-══════════════════════════════════════════════════════ */
 const Spin = ()=>(
   <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:160,gap:10,color:C.textMuted }}>
     <RefreshCw size={18} style={{animation:"spin 1s linear infinite"}}/> Chargement…
