@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   ClipboardList, Plus, Search, X, CheckCircle2, AlertTriangle,
   RefreshCw, ArrowLeft, Calendar, MapPin, User, Building2,
   FileText, FileSpreadsheet, BarChart3, Loader2, Trash2,
-  ChevronDown, ChevronUp, TrendingUp, Award, Users, Image as ImageIcon,
-  BookOpen, Edit3, Star, Send,
+  ChevronDown, ChevronUp, TrendingUp, Users, Send,
+  BookOpen, Edit3, Star, PieChart,
 } from "lucide-react";
+import { Chart, registerables } from "chart.js";
+Chart.register(...registerables);
 import CONFIG from "../../config/config.js";
 
 const C = {
@@ -254,7 +256,7 @@ function SessionDetail({ token, session, onBack }) {
   const [results,      setResults]      = useState([]);
   const [loadingRes,   setLoadingRes]   = useState(false);
   const [exporting,    setExporting]    = useState("");
-  const [graphUrl,     setGraphUrl]     = useState(null);
+  const [graphData,    setGraphData]    = useState(null);  // [{apprenant, pourcentage}]
   const [graphLoading, setGraphLoading] = useState(false);
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState("");
@@ -406,9 +408,40 @@ function SessionDetail({ token, session, onBack }) {
   };
   const dlPdfGlobal = async () => {
     setExporting("pdf");
-    const r = await fetch(`${CONFIG.BASE_URL}${CONFIG.API_PDF_GLOBAL(session.id)}`,{headers:{Authorization:`Bearer ${token}`}});
-    if (r.ok) dlBlob(await r.blob(),`rapport_global_${session.id}.pdf`);
-    setExporting("");
+    try {
+      // ── Charger les données graphe si pas encore fait ──
+      let gd = graphData;
+      if (!gd) {
+        const gr = await authFetch(CONFIG.API_GRAPH(session.id), token);
+        if (gr.ok) gd = await gr.json();
+      }
+      if (!gd) return;
+
+      const nbApp = (gd.scores||[]).length;
+
+      // ── Générer les 3 images hors DOM ──
+      const chartBars = await generateChartBase64(
+        "bar", buildBarsData(gd), buildBarsOpts(nbApp),
+        780, Math.max(300, nbApp * 44 + 100)
+      );
+      const chartCrit = await generateChartBase64(
+        "bar", buildCritBarsData(gd), buildCritBarsOpts(),
+        820, 380
+      );
+      const chartPie = await generateChartBase64(
+        "doughnut", buildPieData(gd), buildPieOpts(),
+        740, 340
+      );
+
+      // ── POST → Django ──
+      const r = await fetch(`${CONFIG.BASE_URL}${CONFIG.API_PDF_GLOBAL(session.id)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ chart_bars: chartBars, chart_crit: chartCrit, chart_pie: chartPie }),
+      });
+      if (r.ok) dlBlob(await r.blob(), `rapport_global_${session.id}.pdf`);
+    } catch(e) { console.error(e); }
+    finally { setExporting(""); }
   };
   const dlExcel = async () => {
     setExporting("excel");
@@ -420,20 +453,14 @@ function SessionDetail({ token, session, onBack }) {
     const r = await fetch(`${CONFIG.BASE_URL}${CONFIG.API_PDF_APPRENANT(session.id,appId)}`,{headers:{Authorization:`Bearer ${token}`}});
     if (r.ok) dlBlob(await r.blob(),`rapport_${nom.replace(/ /g,"_")}.pdf`);
   };
-  const dlPdfUltimate = async () => {
-    setExporting("ultimate");
-    try {
-      const r = await fetch(`${CONFIG.BASE_URL}${CONFIG.API_PDF_ULTIMATE(session.id)}`,{headers:{Authorization:`Bearer ${token}`}});
-      if (r.ok) dlBlob(await r.blob(),`rapport_ultime_session_${session.id}.pdf`);
-    } catch {}
-    finally { setExporting(""); }
-  };
   const loadGraph = async () => {
-    if (graphUrl) { setGraphUrl(null); return; }
+    if (graphData) { setGraphData(null); return; }
     setGraphLoading(true);
-    const r = await fetch(`${CONFIG.BASE_URL}${CONFIG.API_GRAPH(session.id)}`,{headers:{Authorization:`Bearer ${token}`}});
-    if (r.ok) setGraphUrl(URL.createObjectURL(await r.blob()));
-    setGraphLoading(false);
+    try {
+      const r = await authFetch(CONFIG.API_GRAPH(session.id), token);
+      if (r.ok) setGraphData(await r.json());
+    } catch {}
+    finally { setGraphLoading(false); }
   };
 
   /* ─── Stats locales ─── */
@@ -736,13 +763,6 @@ function SessionDetail({ token, session, onBack }) {
                           <span style={{ fontSize:11,fontWeight:700,color:sc.text,minWidth:100,flexShrink:0 }}>{sc.label}</span>
                           {/* Actions */}
                           <div style={{ display:"flex",gap:6,flexShrink:0 }}>
-                            {/* PDF */}
-                            <button onClick={()=>dlPdfApp(a.id,a.nom)} title="Rapport PDF"
-                              style={{ width:30,height:30,borderRadius:8,border:"1px solid #FECDD3",background:"#FFF5F5",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"all .12s" }}
-                              onMouseEnter={e=>{e.currentTarget.style.background="#FECDD3";}}
-                              onMouseLeave={e=>{e.currentTarget.style.background="#FFF5F5";}}>
-                              <FileText size={12} color={C.danger}/>
-                            </button>
                             {/* Modifier */}
                             <button onClick={()=>startEditApp(a)} title="Modifier"
                               style={{ width:30,height:30,borderRadius:8,border:`1px solid ${C.iceBlue}`,background:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"all .12s" }}
@@ -793,15 +813,14 @@ function SessionDetail({ token, session, onBack }) {
             </div>
           )}
           <div style={{ display:"flex",gap:10,marginBottom:16,flexWrap:"wrap" }}>
-            <EBtn icon={FileText}        label="Rapport PDF Complet"   color="#E53935" loading={exporting==="pdf"}   onClick={dlPdfGlobal}/>
-            <EBtn icon={FileSpreadsheet} label="Export Excel" color="#15803D" loading={exporting==="excel"} onClick={dlExcel}/>
-            <EBtn icon={ImageIcon}       label={graphUrl?"Masquer graphique":"Voir graphique"} color={C.purple} loading={graphLoading} onClick={loadGraph} active={!!graphUrl}/>
-            <EBtn icon={Award}          label="PDF Ultime ★"  color="#F5A800" loading={exporting==="ultimate"} onClick={dlPdfUltimate} ultimate={true}/>
+            <EBtn icon={FileText}        label="Rapport PDF Complet" color="#E53935" loading={exporting==="pdf"}   onClick={dlPdfGlobal}/>
+            <EBtn icon={FileSpreadsheet} label="Export Excel"        color="#15803D" loading={exporting==="excel"} onClick={dlExcel}/>
+            <EBtn icon={BarChart3}       label={graphData?"Masquer analyses":"Voir analyses"} color={C.purple} loading={graphLoading} onClick={loadGraph} active={!!graphData}/>
           </div>
-          {graphUrl && (
-            <div style={{ background:C.surface,border:"1.5px solid #EEF2FF",borderRadius:16,padding:20,marginBottom:16 }}>
-              <img src={graphUrl} alt="Graphique" style={{ maxWidth:"100%",borderRadius:10,display:"block",margin:"0 auto" }}/>
-            </div>
+
+          {/* ── Dashboard graphiques Chart.js ── */}
+          {graphData && (
+            <GraphDashboard graphData={graphData}/>
           )}
           <div style={{ background:C.surface,border:"1.5px solid #EEF2FF",borderRadius:18,overflow:"hidden" }}>
             <div style={{ padding:"14px 20px",borderBottom:"1px solid #EEF2FF" }}><SH icon={BarChart3} title="Résultats par apprenant" color={C.blue}/></div>
@@ -824,7 +843,6 @@ function SessionDetail({ token, session, onBack }) {
                         <span style={{ fontSize:11,fontWeight:800,color:i<3?C.accent:C.textMuted }}>#{i+1}</span>
                       </div>
                       <p style={{ flex:1,fontSize:14,fontWeight:800,color:C.navy,minWidth:120 }}>{r.nom}</p>
-                      <span style={{ fontSize:12,color:C.textSub,fontWeight:600 }}>{r.total}/{r.maxPts} pts</span>
                       <div style={{ display:"flex",alignItems:"center",gap:8 }}>
                         <div style={{ width:80,height:6,borderRadius:3,background:"#EEF2FF",overflow:"hidden" }}>
                           <div style={{ width:`${r.pct}%`,height:"100%",background:sc.text,borderRadius:3 }}/>
@@ -832,10 +850,6 @@ function SessionDetail({ token, session, onBack }) {
                         <span style={{ fontSize:13,fontWeight:800,padding:"3px 12px",borderRadius:20,background:sc.bg,color:sc.text,border:`1px solid ${sc.border}` }}>{r.pct}%</span>
                       </div>
                       <span style={{ fontSize:11,fontWeight:700,color:sc.text,minWidth:110 }}>{sc.label}</span>
-                      <button onClick={()=>dlPdfApp(r.id,r.nom)}
-                        style={{ display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:8,border:"1px solid #FECDD3",background:"#FFF1F2",color:C.danger,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Syne',sans-serif" }}>
-                        <FileText size={11}/> PDF
-                      </button>
                     </div>
                   );
                 })}
@@ -844,6 +858,395 @@ function SessionDetail({ token, session, onBack }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+
+
+
+
+
+/* ══════════════════════════════════════════════════════
+   HELPERS — génération d'images Chart.js hors DOM
+   Utilisés par dlPdfGlobal pour envoyer les graphes au PDF
+══════════════════════════════════════════════════════ */
+
+/* ── Palette commune ── */
+const PDF_COLORS = {
+  navy:"#0D1B5E", blue:"#1A3BD4", green:"#0BA376", orange:"#F5A800", red:"#E53935",
+  ice:"#C8D9FF", light:"#EEF2FF",
+};
+const pdfSc = p => p>=75 ? PDF_COLORS.green : p>=50 ? PDF_COLORS.orange : PDF_COLORS.red;
+
+/* ── Graphe 1 : barres horizontales — scores apprenants ── */
+function buildBarsData(gd) {
+  if (!gd) return { labels:[], datasets:[] };
+  const sorted = [...(gd.scores||[])].sort((a,b)=>b.pourcentage-a.pourcentage);
+  return {
+    labels: sorted.map(d=>d.apprenant),
+    datasets:[{
+      label:"Score (%)",
+      data:  sorted.map(d=>Math.round(d.pourcentage)),
+      backgroundColor: sorted.map(d=>pdfSc(d.pourcentage)+"CC"),
+      borderColor:     sorted.map(d=>pdfSc(d.pourcentage)),
+      borderWidth:1.5,
+      borderRadius:5,
+      borderSkipped:false,
+    }],
+  };
+}
+function buildBarsOpts(nbItems=8) {
+  return {
+    indexAxis:"y", responsive:false, animation:{ duration:0 },
+    plugins:{
+      legend:{ display:false },
+      title:{ display:true, text:"Scores par apprenant (%)", font:{ size:14, weight:"bold" }, color:"#0D1B5E", padding:{ bottom:12 } },
+    },
+    scales:{
+      x:{
+        min:0, max:100,
+        ticks:{ callback:v=>`${v}%`, font:{ size:10 }, color:"#4A5A8A" },
+        grid:{ color:"#EEF2FF", lineWidth:1 },
+        border:{ display:false },
+      },
+      y:{
+        ticks:{ font:{ size:11, weight:"bold" }, color:"#0D1B5E" },
+        grid:{ display:false },
+        border:{ display:false },
+      },
+    },
+    layout:{ padding:{ left:8, right:20, top:4, bottom:8 } },
+  };
+}
+
+/* ── Graphe 2 : barres verticales — scores rubriques ── */
+function buildCritBarsData(gd) {
+  if (!gd) return { labels:[], datasets:[] };
+  const cd = gd.critere_data || [];
+  return {
+    labels: cd.map(c=>c.nom),
+    datasets:[{
+      label:"Score (%)",
+      data:  cd.map(c=>Math.round(c.pourcentage)),
+      backgroundColor: cd.map(c=>pdfSc(c.pourcentage)+"CC"),
+      borderColor:     cd.map(c=>pdfSc(c.pourcentage)),
+      borderWidth:1.5,
+      borderRadius:{ topLeft:5, topRight:5 },
+    }],
+  };
+}
+function buildCritBarsOpts() {
+  return {
+    responsive:false, animation:{ duration:0 },
+    plugins:{
+      legend:{ display:false },
+      title:{ display:true, text:"Résultats par rubrique d'évaluation (%)", font:{ size:14, weight:"bold" }, color:"#0D1B5E", padding:{ bottom:12 } },
+    },
+    scales:{
+      y:{
+        min:0, max:100,
+        ticks:{ callback:v=>`${v}%`, font:{ size:10 }, color:"#4A5A8A" },
+        grid:{ color:"#EEF2FF", lineWidth:1 },
+        border:{ display:false },
+      },
+      x:{
+        ticks:{ font:{ size:9 }, color:"#0D1B5E", maxRotation:40 },
+        grid:{ display:false },
+        border:{ display:false },
+      },
+    },
+    layout:{ padding:{ left:8, right:8, top:4, bottom:8 } },
+  };
+}
+
+/* ── Graphe 3 : doughnut satisfaction ── */
+function buildPieData(gd) {
+  if (!gd) return { labels:[], datasets:[] };
+  const nc = gd.notes_counter || {};
+  return {
+    labels:["Pas satisfait (25 pts)","Satisfait (50 pts)","Très satisfait (75 pts)"],
+    datasets:[{
+      data:[nc[1]||0, nc[2]||0, nc[3]||0],
+      backgroundColor:["#E53935CC","#F5A800CC","#0BA376CC"],
+      borderColor:    ["#ffffff",  "#ffffff",  "#ffffff"  ],
+      borderWidth:3,
+      hoverOffset:6,
+    }],
+  };
+}
+function buildPieOpts() {
+  return {
+    responsive:false, animation:{ duration:0 },
+    cutout:"55%",
+    plugins:{
+      legend:{
+        position:"right",
+        labels:{ font:{ size:11 }, padding:16, usePointStyle:true, color:"#0D1B5E" },
+      },
+      title:{ display:true, text:"Répartition des niveaux de satisfaction", font:{ size:14, weight:"bold" }, color:"#0D1B5E", padding:{ bottom:12 } },
+    },
+    layout:{ padding:{ top:4, bottom:8, left:8, right:8 } },
+  };
+}
+
+/* ── Génère un graphe hors-écran → base64 PNG ── */
+async function generateChartBase64(type, data, options, w=800, h=380) {
+  return new Promise((resolve) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    // Fond blanc
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, w, h);
+    canvas.style.position = "absolute";
+    canvas.style.left = "-9999px";
+    document.body.appendChild(canvas);
+    const chart = new Chart(canvas, { type, data, options });
+    setTimeout(() => {
+      const url = canvas.toDataURL("image/png");
+      chart.destroy();
+      document.body.removeChild(canvas);
+      resolve(url);
+    }, 80);
+  });
+}
+
+/* ══════════════════════════════════════════════════════
+   GRAPHIQUES CHART.JS
+   Données backend : { scores, notes_counter, critere_data }
+══════════════════════════════════════════════════════ */
+
+function ChartCanvas({ type, data, options, height=260 }) {
+  const ref  = useRef(null);
+  const inst = useRef(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    if (inst.current) inst.current.destroy();
+    inst.current = new Chart(ref.current, { type, data, options });
+    return () => { if (inst.current) inst.current.destroy(); };
+  }, [JSON.stringify(data)]);
+  return <canvas ref={ref} style={{ maxHeight:height, width:"100%" }}/>;
+}
+
+/*
+  graphData = { scores:[{apprenant,pourcentage,total}],
+                notes_counter:{1:n,2:n,3:n},
+                critere_data:[{nom,total,pourcentage}] }
+*/
+function GraphDashboard({ graphData }) {
+  const [tab, setTab] = useState("bars");
+
+  if (!graphData) return null;
+  const { scores=[], notes_counter={}, critere_data=[] } = graphData;
+
+  const sc = p => p>=75 ? C.success : p>=50 ? C.accent : C.danger;
+  const sorted     = [...scores].sort((a,b) => b.pourcentage - a.pourcentage);
+  const globalAvg  = sorted.length
+    ? Math.round(sorted.reduce((s,d)=>s+d.pourcentage,0)/sorted.length)
+    : 0;
+
+  /* ── Onglets disponibles ── */
+  const tabs = [
+    { id:"bars",  label:"Scores apprenants",  icon:BarChart3 },
+    { id:"pie",   label:"Satisfaction",        icon:PieChart  },
+    { id:"crit",  label:"Par rubrique",        icon:Star      },
+  ];
+
+  /* ── Chart 1 : barres horizontales % ── */
+  const barsData = {
+    labels: sorted.map(d => d.apprenant),
+    datasets: [{
+      label: "Score (%)",
+      data:  sorted.map(d => Math.round(d.pourcentage)),
+      backgroundColor: sorted.map(d => sc(d.pourcentage)+"BB"),
+      borderColor:     sorted.map(d => sc(d.pourcentage)),
+      borderWidth: 1.5, borderRadius: 6, borderSkipped: false,
+    }],
+  };
+  const barsOpts = {
+    indexAxis:"y", responsive:true, maintainAspectRatio:false,
+    plugins:{
+      legend:{ display:false },
+      tooltip:{ callbacks:{ label: ctx=>`${ctx.parsed.x}%` } },
+      annotation:{},
+    },
+    scales:{
+      x:{ min:0, max:100,
+          ticks:{ callback:v=>`${v}%`, font:{ family:"Syne", size:10 } },
+          grid:{ color:"#EEF2FF" } },
+      y:{ ticks:{ font:{ family:"Syne", size:11, weight:"bold" } },
+          grid:{ display:false } },
+    },
+  };
+
+  /* ── Chart 2 : doughnut satisfaction ── */
+  const cntPas  = notes_counter[1] || 0;
+  const cntSat  = notes_counter[2] || 0;
+  const cntTres = notes_counter[3] || 0;
+  const totalNotes = cntPas + cntSat + cntTres;
+  const pieData = {
+    labels: ["Pas satisfait","Satisfait","Très satisfait"],
+    datasets:[{
+      data: [cntPas, cntSat, cntTres],
+      backgroundColor:[C.danger+"BB", C.accent+"BB", C.success+"BB"],
+      borderColor:    [C.danger,       C.accent,       C.success     ],
+      borderWidth:2, hoverOffset:8,
+    }],
+  };
+  const pieOpts = {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{
+      legend:{ position:"bottom",
+               labels:{ font:{ family:"Syne",size:11 }, padding:14, usePointStyle:true } },
+      tooltip:{ callbacks:{ label: ctx=>`${ctx.label} : ${ctx.parsed} éval.` } },
+    },
+  };
+
+  /* ── Chart 3 : barres verticales par critère ── */
+  const critData = {
+    labels: critere_data.map(c => c.nom),
+    datasets:[{
+      label:"Score (%)",
+      data: critere_data.map(c => c.pourcentage),
+      backgroundColor: critere_data.map(c => sc(c.pourcentage)+"BB"),
+      borderColor:     critere_data.map(c => sc(c.pourcentage)),
+      borderWidth:1.5, borderRadius:6,
+    }],
+  };
+  const critOpts = {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{
+      legend:{ display:false },
+      tooltip:{ callbacks:{ label: ctx=>`${ctx.parsed.y}% — ${critere_data[ctx.dataIndex]?.total} pts` } },
+    },
+    scales:{
+      y:{ min:0, max:100,
+          ticks:{ callback:v=>`${v}%`, font:{ family:"Syne",size:10 } },
+          grid:{ color:"#EEF2FF" } },
+      x:{ ticks:{ font:{ family:"Syne",size:10 }, maxRotation:35 },
+          grid:{ display:false } },
+    },
+  };
+
+  const barsH = Math.max(200, sorted.length * 44 + 50);
+
+  return (
+    <div style={{ background:C.surface,border:"1.5px solid #EEF2FF",borderRadius:18,overflow:"hidden",marginBottom:16 }}>
+
+      {/* En-tête */}
+      <div style={{ padding:"14px 20px",borderBottom:"1px solid #EEF2FF",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10 }}>
+        <SH icon={BarChart3} title="Analyse graphique" color={C.purple}/>
+        <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+          <span style={{ fontSize:11,color:C.textMuted,fontWeight:600 }}>Taux moyen :</span>
+          <span style={{ fontSize:15,fontWeight:800,padding:"3px 14px",borderRadius:20,
+            background:sc(globalAvg)+"18",color:sc(globalAvg),border:`1px solid ${sc(globalAvg)}44` }}>
+            {globalAvg}%
+          </span>
+        </div>
+      </div>
+
+      {/* Onglets */}
+      <div style={{ display:"flex",borderBottom:"1px solid #EEF2FF" }}>
+        {tabs.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)}
+            style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,
+              padding:"11px 8px",border:"none",
+              borderBottom:tab===t.id?`2.5px solid ${C.blue}`:"2.5px solid transparent",
+              background:tab===t.id?`${C.blue}08`:"transparent",
+              color:tab===t.id?C.blue:C.textMuted,
+              fontSize:12,fontWeight:tab===t.id?800:600,
+              cursor:"pointer",fontFamily:"'Syne',sans-serif",transition:"all .15s" }}>
+            <t.icon size={12}/>{t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Contenu */}
+      <div style={{ padding:"20px 24px" }}>
+
+        {/* ── Scores apprenants ── */}
+        {tab==="bars" && (
+          <div>
+            {sorted.length===0
+              ? <p style={{color:C.textMuted,fontSize:13,textAlign:"center",padding:"20px 0"}}>Aucune donnée.</p>
+              : <div style={{ height:barsH }}><ChartCanvas type="bar" data={barsData} options={barsOpts} height={barsH}/></div>
+            }
+            <div style={{ display:"flex",gap:16,marginTop:14,flexWrap:"wrap" }}>
+              {[{c:C.success,l:"≥75% — Très satisfaisant"},{c:C.accent,l:"≥50% — Satisfaisant"},{c:C.danger,l:"<50% — Insuffisant"}].map(x=>(
+                <div key={x.l} style={{ display:"flex",alignItems:"center",gap:6 }}>
+                  <div style={{ width:10,height:10,borderRadius:3,background:x.c }}/>
+                  <span style={{ fontSize:10,color:C.textSub,fontWeight:600 }}>{x.l}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Satisfaction (doughnut) ── */}
+        {tab==="pie" && (
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:24,alignItems:"center" }}>
+            <div style={{ height:240 }}>
+              <ChartCanvas type="doughnut" data={pieData} options={pieOpts} height={240}/>
+            </div>
+            <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
+              {[
+                {n:cntTres, label:"Très satisfait",  note:"75 pts", color:C.success},
+                {n:cntSat,  label:"Satisfait",        note:"50 pts", color:C.accent },
+                {n:cntPas,  label:"Pas satisfait",    note:"25 pts", color:C.danger },
+              ].map(x=>(
+                <div key={x.label} style={{ padding:"10px 14px",borderRadius:12,
+                  background:`${x.color}10`,border:`1.5px solid ${x.color}30`,
+                  display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+                  <div>
+                    <p style={{ fontSize:13,fontWeight:800,color:x.color }}>{x.label}</p>
+                    <p style={{ fontSize:10,color:C.textMuted,marginTop:2 }}>{x.note}</p>
+                  </div>
+                  <div style={{ textAlign:"right" }}>
+                    <p style={{ fontSize:22,fontWeight:800,color:x.color,lineHeight:1 }}>{x.n}</p>
+                    <p style={{ fontSize:10,color:C.textMuted }}>
+                      {totalNotes>0?Math.round(x.n/totalNotes*100):0}%
+                    </p>
+                  </div>
+                </div>
+              ))}
+              <div style={{ padding:"10px 14px",borderRadius:12,background:`${C.blue}08`,
+                border:`1px solid ${C.iceBlue}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                <span style={{ fontSize:12,fontWeight:700,color:C.navy }}>Total réponses</span>
+                <span style={{ fontSize:16,fontWeight:800,color:C.blue }}>{totalNotes}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Par rubrique ── */}
+        {tab==="crit" && (
+          <div>
+            {critere_data.length===0
+              ? <p style={{color:C.textMuted,fontSize:13,textAlign:"center",padding:"20px 0"}}>Aucune rubrique.</p>
+              : (
+                <>
+                  <div style={{ height:240, marginBottom:16 }}>
+                    <ChartCanvas type="bar" data={critData} options={critOpts} height={240}/>
+                  </div>
+                  <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:8 }}>
+                    {[...critere_data].sort((a,b)=>b.pourcentage-a.pourcentage).map((c,i)=>(
+                      <div key={i} style={{ padding:"10px 12px",borderRadius:12,
+                        background:`${sc(c.pourcentage)}10`,border:`1px solid ${sc(c.pourcentage)}30` }}>
+                        <p style={{ fontSize:11,fontWeight:700,color:C.navy,marginBottom:4,
+                          overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{c.nom}</p>
+                        <p style={{ fontSize:18,fontWeight:800,color:sc(c.pourcentage),lineHeight:1 }}>{c.pourcentage}%</p>
+                        <p style={{ fontSize:10,color:C.textMuted,marginTop:2 }}>{c.total} pts</p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )
+            }
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }

@@ -37,6 +37,8 @@
 // config.js
 
 // ✅ Détection automatique selon le domaine
+// config.js
+
 const BASE_URL =
   window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
     ? "http://127.0.0.1:8000"
@@ -61,23 +63,19 @@ const CONFIG = {
   API_EVALUATIONS:  "/api/evaluations/",
 
   // ── Rapports & exports ───────────────────────────────────
-  // Résultats JSON : total + % par apprenant
   API_RESULTS: (sessionId) =>
     `/api/sessions/${sessionId}/results/`,
 
-  // PDF individuel par apprenant
   API_PDF_APPRENANT: (sessionId, apprenantId) =>
     `/api/sessions/${sessionId}/pdf-apprenant/${apprenantId}/`,
 
-  // PDF global ultime (6 graphiques) ← url_path='pdf-global-ultimate'
+  // ✅ Correspond à url_path='pdf-global' dans views.py
   API_PDF_GLOBAL: (sessionId) =>
-    `/api/sessions/${sessionId}/pdf-global-ultimate/`,
+    `/api/sessions/${sessionId}/pdf-global/`,
 
-  // Export Excel
   API_EXPORT_EXCEL: (sessionId) =>
     `/api/sessions/${sessionId}/export_excel/`,
 
-  // Graphique PNG simple
   API_GRAPH: (sessionId) =>
     `/api/sessions/${sessionId}/graph/`,
 
