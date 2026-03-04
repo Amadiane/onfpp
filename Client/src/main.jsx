@@ -249,6 +249,7 @@ import ThonRecipesPost from './components/Admin/ThonRecipesPost.jsx';
 import ServicePost from './components/Admin/ServicePost.jsx';
 import ThonProductPost from './components/Admin/ThonProductPost.jsx';
 import AddUser from './components/Admin/AddUser.jsx';
+import SuiviEvaluation from './components/Admin/SuiviEvaluation.jsx';
 
 // ✅ Router
 const router = createBrowserRouter(
@@ -317,6 +318,7 @@ const router = createBrowserRouter(
         <Route path="servicePost" element={<ServicePost />} />
         <Route path="thonProductPost" element={<ThonProductPost />} />
         <Route path="addUser" element={<AddUser />} />
+         <Route path="suiviEvaluation" element={<SuiviEvaluation />} />
       </Route>
 
     </Route>

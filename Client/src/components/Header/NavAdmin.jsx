@@ -85,7 +85,7 @@ const buildNavCategories = (role, counts = {}) => {
       roles: ["DG","CD","DR"],
       items: [
         { path:"/presences",         label:"Présences",               icon:CalendarDays, roles:["DG","CD","DR"] },
-        { path:"/evaluations",       label:"Évaluations",             icon:Award,        roles:["DG","CD","DR"] },
+        { path:"/suiviEvaluation",       label:"Évaluations",             icon:Award,        roles:["DG","CD","DR"] },
         { path:"/resultats",         label:"Résultats finaux",        icon:CheckCircle2, roles:["DG","CD","DR"] },
         { path:"/attestations",      label:"Attestations PDF",        icon:FileText,     roles:["DG","CD","DR"] },
         { path:"/enquete-insertion", label:"Enquête insertion 3 mois",icon:Clock,        roles:["DG","CD","DR"] },

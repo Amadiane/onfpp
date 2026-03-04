@@ -169,3 +169,51 @@ class CentreSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Centre
         fields = ["id", "name", "region"]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# serializers.py
+
+from rest_framework import serializers
+from .models import *
+
+class CritereSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Critere
+        fields = "__all__"
+
+
+class ApprenantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Apprenant
+        fields = "__all__"
+
+
+class EvaluationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Evaluation
+        fields = "__all__"
+
+
+class EvaluationSessionSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = EvaluationSession
+        fields = "__all__"
+
+
+class ApprenantResultSerializer(serializers.Serializer):
+    apprenant = serializers.CharField()
+    total_points = serializers.IntegerField()
+    percentage = serializers.FloatField()

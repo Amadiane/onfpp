@@ -14,6 +14,20 @@ const CONFIG = {
   API_REGIONS: "/api/regions/",
   API_CENTRES: "/api/centres/",
 
+  // Evaluation
+  API_SESSIONS: "/api/sessions/",                  // CRUD sessions
+  API_CRITERES: "/api/criteres/",                  // CRUD critères
+  API_APPRENANTS: "/api/apprenants/",              // CRUD apprenants
+  API_EVALUATIONS: "/api/evaluations/",            // CRUD évaluations
+
+  // Nouveaux endpoints pour rapports
+  API_RESULTS: (sessionId) => `/api/sessions/${sessionId}/results/`,                       // JSON total + %
+  API_PDF_APPRENANT: (sessionId, apprenantId) => `/api/sessions/${sessionId}/pdf-apprenant/${apprenantId}/`,
+  API_PDF_GLOBAL: (sessionId) => `/api/sessions/${sessionId}/pdf_global/`,
+  API_EXPORT_EXCEL: (sessionId) => `/api/sessions/${sessionId}/export_excel/`,
+  API_GRAPH: (sessionId) => `/api/sessions/${sessionId}/graph/`,
+
+
   CLOUDINARY_NAME: "dwuyq2eoz",
   CLOUDINARY_UPLOAD_PRESET: "default", // preset Unsigned
 };

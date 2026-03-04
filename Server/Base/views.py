@@ -227,3 +227,207 @@ class UserListView(generics.ListAPIView):
     serializer_class   = UserListSerializer
     # permission_classes = [IsAuthenticated]
     permission_classes = [AllowAny]  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# views.py
+
+import io
+import matplotlib.pyplot as plt
+
+from django.http import HttpResponse
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.decorators import action
+from rest_framework.response import Response
+
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import A4
+
+from openpyxl import Workbook
+
+from .models import *
+from .serializers import *
+
+
+# views.py
+
+import io
+import matplotlib.pyplot as plt
+
+from django.http import HttpResponse
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.decorators import action
+from rest_framework.response import Response
+
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import A4
+from openpyxl import Workbook
+
+from .models import *
+from .serializers import *
+
+# ViewSets CRUD pour les autres modèles
+class CritereViewSet(ModelViewSet):
+    queryset = Critere.objects.all()
+    serializer_class = CritereSerializer
+
+class ApprenantViewSet(ModelViewSet):
+    queryset = Apprenant.objects.all()
+    serializer_class = ApprenantSerializer
+
+class EvaluationViewSet(ModelViewSet):
+    queryset = Evaluation.objects.all()
+    serializer_class = EvaluationSerializer
+
+
+# ViewSet principal pour EvaluationSession
+class EvaluationSessionViewSet(ModelViewSet):
+    queryset = EvaluationSession.objects.all()
+    serializer_class = EvaluationSessionSerializer
+
+    # 🔹 Résultats JSON par session
+    @action(detail=True, methods=['get'])
+    def results(self, request, pk=None):
+        session = self.get_object()
+        apprenants = Apprenant.objects.all()
+
+        data = []
+        for apprenant in apprenants:
+            total = session.total_points_apprenant(apprenant)
+            percent = session.percentage_apprenant(apprenant)
+            data.append({
+                "apprenant": apprenant.nom,
+                "total_points": total,
+                "percentage": percent
+            })
+
+        return Response(data)
+
+    # 🔹 PDF par apprenant
+    @action(detail=True, methods=['get'], url_path='pdf-apprenant/(?P<apprenant_id>[^/.]+)')
+    def pdf_apprenant(self, request, pk=None, apprenant_id=None):
+        session = self.get_object()
+        apprenant = Apprenant.objects.get(id=apprenant_id)
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        elements = []
+        styles = getSampleStyleSheet()
+
+        elements.append(Paragraph(f"Rapport Evaluation - {apprenant.nom}", styles['Title']))
+        elements.append(Spacer(1, 12))
+
+        total = session.total_points_apprenant(apprenant)
+        percent = session.percentage_apprenant(apprenant)
+
+        data = [
+            ["Total Points", total],
+            ["Pourcentage", f"{percent}%"]
+        ]
+        table = Table(data)
+        elements.append(table)
+
+        doc.build(elements)
+        buffer.seek(0)
+        return HttpResponse(buffer, content_type='application/pdf')
+
+    # 🔹 PDF global session
+    @action(detail=True, methods=['get'])
+    def pdf_global(self, request, pk=None):
+        session = self.get_object()
+        apprenants = Apprenant.objects.all()
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        elements = []
+        styles = getSampleStyleSheet()
+
+        elements.append(Paragraph("Rapport Global Session", styles['Title']))
+        elements.append(Spacer(1, 12))
+
+        data = [["Apprenant", "Total", "%"]]
+        for apprenant in apprenants:
+            total = session.total_points_apprenant(apprenant)
+            percent = session.percentage_apprenant(apprenant)
+            data.append([apprenant.nom, total, percent])
+
+        table = Table(data)
+        elements.append(table)
+
+        doc.build(elements)
+        buffer.seek(0)
+        return HttpResponse(buffer, content_type='application/pdf')
+
+    # 🔹 Export Excel
+    @action(detail=True, methods=['get'])
+    def export_excel(self, request, pk=None):
+        session = self.get_object()
+        apprenants = Apprenant.objects.all()
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Résultats"
+        ws.append(["Apprenant", "Total", "%"])
+
+        for apprenant in apprenants:
+            total = session.total_points_apprenant(apprenant)
+            percent = session.percentage_apprenant(apprenant)
+            ws.append([apprenant.nom, total, percent])
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = "attachment; filename=resultats.xlsx"
+        wb.save(response)
+        return response
+
+    # 🔹 Graphique statistique
+    @action(detail=True, methods=['get'])
+    def graph(self, request, pk=None):
+        session = self.get_object()
+        apprenants = Apprenant.objects.all()
+
+        names = [a.nom for a in apprenants]
+        percentages = [session.percentage_apprenant(a) for a in apprenants]
+
+        plt.figure(figsize=(10,5))
+        plt.bar(names, percentages, color='skyblue')
+        plt.xlabel("Apprenants")
+        plt.ylabel("Pourcentage")
+        plt.title("Résultats Session")
+        plt.xticks(rotation=45)
+
+        buffer = io.BytesIO()
+        plt.tight_layout()
+        plt.savefig(buffer, format='png')
+        plt.close()
+        buffer.seek(0)
+
+        return HttpResponse(buffer, content_type='image/png')

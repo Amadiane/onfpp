@@ -31,13 +31,14 @@ const adminPaths = [
   "/activitiesPost", "/homePost", "/partnerPost",
   "/servicePost", "/portfolioPost", "/addUser",
   /* routes du nouveau NavAdmin */
-  "/formations", "/sessions", "/programmes", "/certifications",
+  "/formations", "/sessions", "/suiviEvaluation","/programmes", "/certifications",
   "/inscription", "/apprenants", "/listeCandidats", "/validation",
   "/suivi", "/presences", "/evaluations", "/discipline",
   "/resultats", "/attestations", "/enquete-insertion", "/relances",
   "/entreprises", "/offres-emploi", "/statistiques",
   "/dashboardRegional", "/rapports", "/centresFormation",
   "/teamMessage", "/partnerPost", "/utilisateurs", "/parametres",
+
 ];
 
 const App = () => {

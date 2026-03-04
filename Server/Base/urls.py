@@ -2,11 +2,23 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import CustomLoginView, UserCreateView, MeView, RoleViewSet, RegionViewSet, CentreViewSet, UserListView
+from .views import (
+    EvaluationSessionViewSet,
+    CritereViewSet,
+    ApprenantViewSet,
+    EvaluationViewSet
+)
 
 router = DefaultRouter()
 router.register(r'roles', RoleViewSet)
 router.register(r'regions', RegionViewSet)
 router.register(r'centres', CentreViewSet)
+router.register(r'sessions', EvaluationSessionViewSet)
+router.register(r'criteres', CritereViewSet)
+router.register(r'apprenants', ApprenantViewSet)
+router.register(r'evaluations', EvaluationViewSet)
+
+
 
 urlpatterns = [
     path("login/", CustomLoginView.as_view(), name="login"),
