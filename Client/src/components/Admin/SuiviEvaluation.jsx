@@ -420,6 +420,14 @@ function SessionDetail({ token, session, onBack }) {
     const r = await fetch(`${CONFIG.BASE_URL}${CONFIG.API_PDF_APPRENANT(session.id,appId)}`,{headers:{Authorization:`Bearer ${token}`}});
     if (r.ok) dlBlob(await r.blob(),`rapport_${nom.replace(/ /g,"_")}.pdf`);
   };
+  const dlPdfUltimate = async () => {
+    setExporting("ultimate");
+    try {
+      const r = await fetch(`${CONFIG.BASE_URL}${CONFIG.API_PDF_ULTIMATE(session.id)}`,{headers:{Authorization:`Bearer ${token}`}});
+      if (r.ok) dlBlob(await r.blob(),`rapport_ultime_session_${session.id}.pdf`);
+    } catch {}
+    finally { setExporting(""); }
+  };
   const loadGraph = async () => {
     if (graphUrl) { setGraphUrl(null); return; }
     setGraphLoading(true);
@@ -785,9 +793,10 @@ function SessionDetail({ token, session, onBack }) {
             </div>
           )}
           <div style={{ display:"flex",gap:10,marginBottom:16,flexWrap:"wrap" }}>
-            <EBtn icon={FileText}        label="PDF Global"   color="#E53935" loading={exporting==="pdf"}   onClick={dlPdfGlobal}/>
+            <EBtn icon={FileText}        label="Rapport PDF Complet"   color="#E53935" loading={exporting==="pdf"}   onClick={dlPdfGlobal}/>
             <EBtn icon={FileSpreadsheet} label="Export Excel" color="#15803D" loading={exporting==="excel"} onClick={dlExcel}/>
             <EBtn icon={ImageIcon}       label={graphUrl?"Masquer graphique":"Voir graphique"} color={C.purple} loading={graphLoading} onClick={loadGraph} active={!!graphUrl}/>
+            <EBtn icon={Award}          label="PDF Ultime ★"  color="#F5A800" loading={exporting==="ultimate"} onClick={dlPdfUltimate} ultimate={true}/>
           </div>
           {graphUrl && (
             <div style={{ background:C.surface,border:"1.5px solid #EEF2FF",borderRadius:16,padding:20,marginBottom:16 }}>
@@ -867,12 +876,35 @@ const Btn = ({onClick,icon:I,label})=>(
     <I size={14}/>{label}
   </button>
 );
-const EBtn = ({icon:I,label,color,loading,onClick,active})=>(
+const EBtn = ({icon:I,label,color,loading,onClick,active,ultimate})=>(
   <button onClick={onClick} disabled={loading}
-    style={{ display:"flex",alignItems:"center",gap:7,padding:"9px 16px",borderRadius:10,border:`1.5px solid ${active?color:C.iceBlue}`,background:active?`${color}10`:C.surfaceAlt,color:active?color:C.textSub,fontSize:12,fontWeight:700,cursor:loading?"not-allowed":"pointer",fontFamily:"'Syne',sans-serif",transition:"all .15s" }}
-    onMouseEnter={e=>{if(!loading){e.currentTarget.style.background=`${color}15`;e.currentTarget.style.borderColor=color;e.currentTarget.style.color=color;}}}
-    onMouseLeave={e=>{if(!loading&&!active){e.currentTarget.style.background=C.surfaceAlt;e.currentTarget.style.borderColor=C.iceBlue;e.currentTarget.style.color=C.textSub;}}}>
-    {loading?<Loader2 size={13} style={{animation:"spin 1s linear infinite"}}/>:<I size={13}/>} {label}
+    style={{
+      display:"flex",alignItems:"center",gap:7,
+      padding:ultimate?"10px 18px":"9px 16px",
+      borderRadius:ultimate?12:10,
+      border:ultimate?`2px solid ${color}`:`1.5px solid ${active?color:C.iceBlue}`,
+      background:ultimate?`linear-gradient(135deg,${color}22,${color}08)`:active?`${color}10`:C.surfaceAlt,
+      color:ultimate?color:active?color:C.textSub,
+      fontSize:ultimate?13:12,
+      fontWeight:ultimate?800:700,
+      cursor:loading?"not-allowed":"pointer",
+      fontFamily:"'Syne',sans-serif",
+      transition:"all .15s",
+      boxShadow:ultimate?`0 2px 12px ${color}30`:"none",
+    }}
+    onMouseEnter={e=>{if(!loading){
+      e.currentTarget.style.background=ultimate?color:`${color}15`;
+      e.currentTarget.style.borderColor=color;
+      e.currentTarget.style.color=ultimate?"#fff":color;
+      if(ultimate) e.currentTarget.style.boxShadow=`0 4px 20px ${color}50`;
+    }}}
+    onMouseLeave={e=>{if(!loading){
+      e.currentTarget.style.background=ultimate?`linear-gradient(135deg,${color}22,${color}08)`:active?`${color}10`:C.surfaceAlt;
+      e.currentTarget.style.borderColor=ultimate||active?color:C.iceBlue;
+      e.currentTarget.style.color=ultimate||active?color:C.textSub;
+      if(ultimate) e.currentTarget.style.boxShadow=`0 2px 12px ${color}30`;
+    }}}>
+    {loading?<Loader2 size={13} style={{animation:"spin 1s linear infinite"}}/>:<I size={ultimate?15:13}/>} {label}
   </button>
 );
 const PH = ({onBack,title,sub,icon:I})=>(
