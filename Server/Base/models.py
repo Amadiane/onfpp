@@ -88,7 +88,9 @@ class EvaluationSession(models.Model):
     organisme = models.CharField(max_length=255)
     formateur = models.CharField(max_length=255)
     structure_beneficiaire = models.CharField(max_length=255, blank=True, null=True)
+    commentaire_final = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
 
     def total_points_apprenant(self, apprenant):
         evaluations = self.evaluation_set.filter(apprenant=apprenant)
@@ -128,5 +130,5 @@ class Evaluation(models.Model):
     session = models.ForeignKey(EvaluationSession, on_delete=models.CASCADE)
     apprenant = models.ForeignKey(Apprenant, on_delete=models.CASCADE)
     critere = models.ForeignKey(Critere, on_delete=models.CASCADE)
-
     note = models.IntegerField(choices=NOTE_CHOICES)
+    commentaire = models.TextField(blank=True, null=True)

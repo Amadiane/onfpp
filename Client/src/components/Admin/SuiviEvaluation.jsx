@@ -267,13 +267,27 @@ function SessionDetail({ token, session, onBack }) {
   const [draft,        setDraft]        = useState(null);
   const [draftNom,     setDraftNom]     = useState("");
   const [draftEmail,   setDraftEmail]   = useState("");
+  const [draftComment, setDraftComment] = useState("");   // commentaire du draft
   const [savingDraft,  setSavingDraft]  = useState(false);
+
+  /* ── Commentaires individuels (post-save, édition inline) ── */
+  const [editCommentApp,    setEditCommentApp]    = useState(null);
+  const [editCommentVal,    setEditCommentVal]    = useState("");
+  const [savingComment,     setSavingComment]     = useState(null);
+  // Toggle inclusion dans le PDF : { appId: true|false }
+  const [incluirePdf,       setIncluirePdf]       = useState({});
+
+  /* ── Commentaire final de session ── */
+  const [commentFinal,      setCommentFinal]      = useState(session.commentaire_final||"");
+  const [editingFinal,      setEditingFinal]      = useState(false);
+  const [editFinalVal,      setEditFinalVal]       = useState(commentFinal);
+  const [savingFinal,       setSavingFinal]        = useState(false);
 
   /* ── Résultats / Exports ── */
   const [results,      setResults]      = useState([]);
   const [loadingRes,   setLoadingRes]   = useState(false);
   const [exporting,    setExporting]    = useState("");
-  const [graphData,    setGraphData]    = useState(null);  // [{apprenant, pourcentage}]
+  const [graphData,    setGraphData]    = useState(null);
   const [graphLoading, setGraphLoading] = useState(false);
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState("");
@@ -305,12 +319,27 @@ function SessionDetail({ token, session, onBack }) {
         const eD = eR.ok ? await eR.json() : [];
         const e  = Array.isArray(eD) ? eD : eD.results||[];
 
-        const notesMap = {};
+        const notesMap    = {};  // appId → { critId: note }
+        const evalIdsMap  = {};  // appId → { critId: evalId }
+        const commentMap  = {};  // appId → commentaire (on prend le 1er non vide)
         e.forEach(ev => {
-          if (!notesMap[ev.apprenant]) notesMap[ev.apprenant] = {};
-          notesMap[ev.apprenant][ev.critere] = ev.note;
+          if (!notesMap[ev.apprenant])   notesMap[ev.apprenant]   = {};
+          if (!evalIdsMap[ev.apprenant]) evalIdsMap[ev.apprenant] = {};
+          notesMap[ev.apprenant][ev.critere]   = ev.note;
+          evalIdsMap[ev.apprenant][ev.critere] = ev.id;
+          if (ev.commentaire && !commentMap[ev.apprenant]) commentMap[ev.apprenant] = ev.commentaire;
         });
-        setApprenants(a.filter(ap => notesMap[ap.id]).map(ap => ({ ...ap, notes:notesMap[ap.id], saved:true })));
+        const inclMap = {};
+        const appList = a.filter(ap => notesMap[ap.id]).map(ap => {
+          if (commentMap[ap.id]) inclMap[ap.id] = true;
+          return {
+            ...ap, notes:notesMap[ap.id], saved:true,
+            evalIds:  evalIdsMap[ap.id]  || {},
+            commentaire: commentMap[ap.id] || "",
+          };
+        });
+        setIncluirePdf(inclMap);
+        setApprenants(appList);
       } catch { setError("Erreur de chargement."); }
       finally   { setLoading(false); }
     })();
@@ -367,7 +396,7 @@ function SessionDetail({ token, session, onBack }) {
 
   /* ═══ APPRENANTS ═══ */
 
-  const openDraft = () => { setDraft({ notes:{} }); setDraftNom(""); setDraftEmail(""); };
+  const openDraft = () => { setDraft({ notes:{} }); setDraftNom(""); setDraftEmail(""); setDraftComment(""); };
   const setDraftNote = (critId, note) => setDraft(p => ({ ...p, notes:{ ...p.notes, [critId]:note } }));
 
   const saveDraft = async () => {
@@ -379,16 +408,31 @@ function SessionDetail({ token, session, onBack }) {
       });
       if (!aR.ok && aR.status!==201) return;
       const apprenant = await aR.json();
-      await Promise.all(
+      const evalResponses = await Promise.all(
         criteres.filter(c => draft.notes[c.id]).map(c =>
           authFetch(CONFIG.API_EVALUATIONS, token, {
             method:"POST",
-            body:JSON.stringify({ session:session.id, apprenant:apprenant.id, critere:c.id, note:draft.notes[c.id] }),
-          })
+            body:JSON.stringify({
+              session:session.id, apprenant:apprenant.id, critere:c.id,
+              note:draft.notes[c.id],
+              commentaire: draftComment.trim()||undefined,
+            }),
+          }).then(r=>r.json().catch(()=>null))
         )
       );
-      setApprenants(p => [...p, { ...apprenant, notes:draft.notes, saved:true }]);
-      setDraft(null); setDraftNom(""); setDraftEmail("");
+      // Construire evalIds : { critId: evalId } pour permettre édition commentaire
+      const evalIds = {};
+      criteres.filter(c=>draft.notes[c.id]).forEach((c,i)=>{
+        if (evalResponses[i]?.id) evalIds[c.id] = evalResponses[i].id;
+      });
+      setApprenants(p => [...p, {
+        ...apprenant, notes:draft.notes, saved:true,
+        evalIds, commentaire:draftComment.trim(),
+      }]);
+      if (draftComment.trim()) {
+        setIncluirePdf(p => ({ ...p, [apprenant.id]: true }));
+      }
+      setDraft(null); setDraftNom(""); setDraftEmail(""); setDraftComment("");
     } catch {}
     finally { setSavingDraft(false); }
   };
@@ -419,6 +463,84 @@ function SessionDetail({ token, session, onBack }) {
       if (r.ok||r.status===204) setApprenants(p => p.filter(a => a.id!==id));
     } catch {}
     finally { setDeletingApp(null); }
+  };
+
+  /* ═══ COMMENTAIRES INDIVIDUELS ═══ */
+
+  /* Récupère l'id de l'évaluation d'un apprenant pour une rubrique donnée
+     On stocke les eval ids dans apprenants[].evalIds = { critId: evalId } lors du chargement */
+  const startEditComment = (a) => {
+    setEditCommentApp(a.id);
+    setEditCommentVal(a.commentaire||"");
+  };
+  const cancelEditComment = () => { setEditCommentApp(null); setEditCommentVal(""); };
+
+  const saveComment = async (appId) => {
+    setSavingComment(appId);
+    try {
+      // On PATCH le premier eval de cet apprenant avec le commentaire
+      // (le backend update-commentaire le stocke sur toutes les evals de cet apprenant dans cette session)
+      const a = apprenants.find(x=>x.id===appId);
+      if (!a) return;
+      const firstEvalId = a.evalIds ? Object.values(a.evalIds)[0] : null;
+      if (!firstEvalId) return;
+      const r = await authFetch(
+        `${CONFIG.API_EVALUATIONS}${firstEvalId}/update-commentaire/`, token,
+        { method:"PATCH", body:JSON.stringify({ commentaire: editCommentVal }) }
+      );
+      if (r.ok) {
+        setApprenants(p => p.map(x => x.id===appId ? { ...x, commentaire:editCommentVal } : x));
+        cancelEditComment();
+      }
+    } catch {}
+    finally { setSavingComment(null); }
+  };
+
+  const deleteComment = async (appId) => {
+    setSavingComment(appId);
+    try {
+      const a = apprenants.find(x=>x.id===appId);
+      if (!a) return;
+      const firstEvalId = a.evalIds ? Object.values(a.evalIds)[0] : null;
+      if (!firstEvalId) return;
+      const r = await authFetch(
+        `${CONFIG.API_EVALUATIONS}${firstEvalId}/update-commentaire/`, token,
+        { method:"PATCH", body:JSON.stringify({ commentaire: "" }) }
+      );
+      if (r.ok) {
+        setApprenants(p => p.map(x => x.id===appId ? { ...x, commentaire:"" } : x));
+      }
+    } catch {}
+    finally { setSavingComment(null); }
+  };
+
+  /* ═══ COMMENTAIRE FINAL SESSION ═══ */
+
+  const openEditFinal = () => { setEditFinalVal(commentFinal); setEditingFinal(true); };
+  const cancelEditFinal = () => { setEditingFinal(false); setEditFinalVal(""); };
+
+  const saveCommentFinal = async () => {
+    setSavingFinal(true);
+    try {
+      const r = await authFetch(
+        `${CONFIG.API_SESSIONS}${session.id}/update-commentaire-final/`, token,
+        { method:"PATCH", body:JSON.stringify({ commentaire_final: editFinalVal }) }
+      );
+      if (r.ok) { setCommentFinal(editFinalVal); setEditingFinal(false); }
+    } catch {}
+    finally { setSavingFinal(false); }
+  };
+
+  const deleteCommentFinal = async () => {
+    setSavingFinal(true);
+    try {
+      const r = await authFetch(
+        `${CONFIG.API_SESSIONS}${session.id}/update-commentaire-final/`, token,
+        { method:"PATCH", body:JSON.stringify({ commentaire_final: "" }) }
+      );
+      if (r.ok) { setCommentFinal(""); setEditingFinal(false); }
+    } catch {}
+    finally { setSavingFinal(false); }
   };
 
   /* ═══ MODIFIER / SUPPRIMER SESSION ═══ */
@@ -495,10 +617,19 @@ function SessionDetail({ token, session, onBack }) {
       );
 
       // ── POST → Django ──
+      // On envoie la liste des apprenants dont le commentaire doit apparaître dans le PDF
+      const commentaires_a_inclure = apprenants
+        .filter(a => a.commentaire && incluirePdf[a.id])
+        .map(a => ({ nom: a.nom, commentaire: a.commentaire }));
+
       const r = await fetch(`${CONFIG.BASE_URL}${CONFIG.API_PDF_GLOBAL(session.id)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ chart_bars: chartBars, chart_crit: chartCrit, chart_pie: chartPie }),
+        body: JSON.stringify({
+          chart_bars: chartBars, chart_crit: chartCrit, chart_pie: chartPie,
+          commentaires_apprenants: commentaires_a_inclure,
+          commentaire_final: commentFinal || "",
+        }),
       });
       if (r.ok) dlBlob(await r.blob(), `rapport_global_${session.id}.pdf`);
     } catch(e) { console.error(e); }
@@ -804,6 +935,22 @@ function SessionDetail({ token, session, onBack }) {
                     </div>
                   );
                 })}
+                {/* Commentaire apprenant */}
+                <div style={{ padding:"14px 20px",borderTop:"1px solid #EEF2FF",background:"#FAFBFF" }}>
+                  <label style={{ fontSize:11,fontWeight:700,color:C.textSub,display:"flex",alignItems:"center",gap:6,marginBottom:7 }}>
+                    <span style={{ width:18,height:18,borderRadius:5,background:`${C.purple}18`,display:"inline-flex",alignItems:"center",justifyContent:"center" }}>
+                      <FileText size={10} color={C.purple}/>
+                    </span>
+                    Commentaire (optionnel)
+                  </label>
+                  <textarea
+                    value={draftComment}
+                    onChange={e=>setDraftComment(e.target.value)}
+                    placeholder="Observations sur l'apprenant, points forts, axes d'amélioration…"
+                    rows={2}
+                    style={{ width:"100%",padding:"9px 12px",borderRadius:10,border:`1.5px solid ${C.iceBlue}`,fontSize:12,color:C.navy,fontFamily:"'Inter',sans-serif",outline:"none",resize:"vertical",boxSizing:"border-box",background:"#fff",lineHeight:1.5 }}
+                  />
+                </div>
                 {/* Footer total */}
                 <div style={{ padding:"14px 20px",background:`${C.blue}05`,borderTop:"2px solid #EEF2FF",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12 }}>
                   <div>
@@ -914,6 +1061,85 @@ function SessionDetail({ token, session, onBack }) {
                           </div>
                         </div>
                       )}
+
+                      {/* ── Commentaire inline ── */}
+                      {editCommentApp===a.id ? (
+                        <div style={{ padding:"10px 16px",borderTop:"1px solid #EEF2FF",background:"#FAFBFF" }}>
+                          <textarea
+                            autoFocus
+                            value={editCommentVal}
+                            onChange={e=>setEditCommentVal(e.target.value)}
+                            rows={2}
+                            placeholder="Commentaire sur l'apprenant…"
+                            style={{ width:"100%",padding:"8px 11px",borderRadius:9,border:`1.5px solid ${C.blue}`,fontSize:12,color:C.navy,fontFamily:"'Inter',sans-serif",outline:"none",resize:"vertical",boxSizing:"border-box",background:"#fff",boxShadow:`0 0 0 3px ${C.blue}15` }}
+                          />
+                          <div style={{ display:"flex",gap:8,marginTop:8 }}>
+                            <button onClick={()=>saveComment(a.id)} disabled={savingComment===a.id}
+                              style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 14px",borderRadius:8,border:"none",background:C.blue,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Inter',sans-serif" }}>
+                              {savingComment===a.id?<Loader2 size={11} style={{animation:"spin 1s linear infinite"}}/>:<CheckCircle2 size={11}/>} Sauvegarder
+                            </button>
+                            <button onClick={cancelEditComment}
+                              style={{ padding:"6px 12px",borderRadius:8,border:`1px solid ${C.iceBlue}`,background:C.surfaceAlt,color:C.textSub,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Inter',sans-serif" }}>
+                              Annuler
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ padding:"8px 14px 10px",borderTop:"1px solid #F5F7FF",display:"flex",alignItems:"flex-start",gap:8,flexWrap:"wrap" }}>
+                          {a.commentaire ? (
+                            <div style={{ flex:1,display:"flex",flexDirection:"column",gap:7 }}>
+                              {/* Texte du commentaire */}
+                              <div style={{ display:"flex",alignItems:"flex-start",gap:8 }}>
+                                <div style={{ flex:1 }}>
+                                  <p style={{ fontSize:11,color:C.textSub,lineHeight:1.5,fontStyle:"italic" }}>"{a.commentaire}"</p>
+                                </div>
+                                <div style={{ display:"flex",gap:4,flexShrink:0 }}>
+                                  <button onClick={()=>startEditComment(a)} title="Modifier"
+                                    style={{ width:22,height:22,borderRadius:6,border:`1px solid ${C.iceBlue}`,background:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}
+                                    onMouseEnter={e=>{e.currentTarget.style.background=`${C.blue}14`;e.currentTarget.style.borderColor=C.blue;}}
+                                    onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor=C.iceBlue;}}>
+                                    <Edit3 size={9} color={C.textSub}/>
+                                  </button>
+                                  <button onClick={()=>deleteComment(a.id)} disabled={savingComment===a.id} title="Supprimer"
+                                    style={{ width:22,height:22,borderRadius:6,border:"1px solid #FECDD3",background:"#FFF5F5",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}
+                                    onMouseEnter={e=>{e.currentTarget.style.background="#FECDD3";}}
+                                    onMouseLeave={e=>{e.currentTarget.style.background="#FFF5F5";}}>
+                                    {savingComment===a.id?<Loader2 size={9} color={C.danger} style={{animation:"spin 1s linear infinite"}}/>:<Trash2 size={9} color={C.danger}/>}
+                                  </button>
+                                </div>
+                              </div>
+                              {/* Toggle inclure dans PDF */}
+                              <div style={{ display:"flex",alignItems:"center",gap:6 }}>
+                                <button
+                                  onClick={()=>setIncluirePdf(p=>({...p,[a.id]:!p[a.id]}))}
+                                  style={{
+                                    display:"flex",alignItems:"center",gap:6,
+                                    padding:"4px 10px",borderRadius:20,
+                                    border:`1.5px solid ${incluirePdf[a.id]?C.success:"#FECDD3"}`,
+                                    background:incluirePdf[a.id]?"#F0FDF4":"#FFF5F5",
+                                    color:incluirePdf[a.id]?C.success:C.danger,
+                                    fontSize:10,fontWeight:700,cursor:"pointer",
+                                    fontFamily:"'Inter',sans-serif",transition:"all .15s",
+                                  }}>
+                                  {incluirePdf[a.id]
+                                    ? <><CheckCircle2 size={10}/> Inclus dans le PDF</>
+                                    : <><X size={10}/> Exclu du PDF</>}
+                                </button>
+                                <span style={{ fontSize:10,color:C.textMuted }}>
+                                  {incluirePdf[a.id] ? "Ce commentaire apparaîtra dans le rapport." : "Ce commentaire n'apparaîtra pas."}
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <button onClick={()=>startEditComment(a)}
+                              style={{ display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:7,border:`1px dashed ${C.iceBlue}`,background:"transparent",color:C.textMuted,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Inter',sans-serif",transition:"all .12s" }}
+                              onMouseEnter={e=>{e.currentTarget.style.borderColor=C.purple;e.currentTarget.style.color=C.purple;e.currentTarget.style.background=`${C.purple}08`;}}
+                              onMouseLeave={e=>{e.currentTarget.style.borderColor=C.iceBlue;e.currentTarget.style.color=C.textMuted;e.currentTarget.style.background="transparent";}}>
+                              <FileText size={10}/> Ajouter un commentaire
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -987,6 +1213,71 @@ function SessionDetail({ token, session, onBack }) {
                 })}
               </div>
             )}
+          </div>
+
+          {/* ── Commentaire final de session ── */}
+          <div style={{ marginTop:16,background:C.surface,border:`1.5px solid ${editingFinal||commentFinal?C.purple:C.iceBlue}`,borderRadius:18,overflow:"hidden",transition:"border-color .2s" }}>
+            <div style={{ padding:"14px 20px",borderBottom:"1px solid #EEF2FF",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10 }}>
+              <div>
+                <SH icon={FileText} title="Commentaire final du responsable" color={C.purple}/>
+                <p style={{ fontSize:11,color:C.textMuted,marginTop:5,marginLeft:37 }}>Ce texte sera imprimé en bas du rapport PDF.</p>
+              </div>
+              {commentFinal && !editingFinal && (
+                <div style={{ display:"flex",gap:7 }}>
+                  <button onClick={openEditFinal}
+                    style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:9,border:`1.5px solid ${C.purple}22`,background:`${C.purple}08`,color:C.purple,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Inter',sans-serif" }}>
+                    <Edit3 size={10}/> Modifier
+                  </button>
+                  <button onClick={deleteCommentFinal} disabled={savingFinal}
+                    style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:9,border:"1.5px solid #FECDD3",background:"#FFF5F5",color:C.danger,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Inter',sans-serif" }}>
+                    <Trash2 size={10}/> Supprimer
+                  </button>
+                </div>
+              )}
+            </div>
+            <div style={{ padding:"18px 20px" }}>
+              {editingFinal ? (
+                /* ── mode édition ── */
+                <div>
+                  <textarea
+                    autoFocus
+                    value={editFinalVal}
+                    onChange={e=>setEditFinalVal(e.target.value)}
+                    rows={5}
+                    placeholder="Ex : Cette formation a permis aux participants d'acquérir les compétences clés en gestion de projet. Les résultats sont globalement satisfaisants. Il est recommandé de renforcer les modules pratiques lors des prochaines sessions."
+                    style={{ width:"100%",padding:"12px 14px",borderRadius:12,border:`1.5px solid ${C.purple}`,fontSize:13,color:C.navy,fontFamily:"'Inter',sans-serif",outline:"none",resize:"vertical",boxSizing:"border-box",lineHeight:1.7,boxShadow:`0 0 0 3px ${C.purple}15` }}
+                  />
+                  <div style={{ display:"flex",gap:10,marginTop:12,flexWrap:"wrap",alignItems:"center" }}>
+                    <button onClick={saveCommentFinal} disabled={savingFinal}
+                      style={{ display:"flex",alignItems:"center",gap:7,padding:"10px 22px",borderRadius:10,border:"none",background:`linear-gradient(135deg,${C.purple},#9F5AED)`,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"'Inter',sans-serif",boxShadow:`0 4px 14px ${C.purple}40` }}>
+                      {savingFinal?<Loader2 size={13} style={{animation:"spin 1s linear infinite"}}/>:<CheckCircle2 size={13}/>} Enregistrer
+                    </button>
+                    <button onClick={cancelEditFinal}
+                      style={{ padding:"10px 16px",borderRadius:10,border:`1.5px solid ${C.iceBlue}`,background:C.surfaceAlt,color:C.textSub,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'Inter',sans-serif" }}>
+                      Annuler
+                    </button>
+                  </div>
+                </div>
+              ) : commentFinal ? (
+                /* ── commentaire existant ── */
+                <div style={{ padding:"14px 18px",borderRadius:12,background:`${C.purple}07`,border:`1px solid ${C.purple}25` }}>
+                  <p style={{ fontSize:13,color:C.navy,lineHeight:1.8,whiteSpace:"pre-wrap" }}>{commentFinal}</p>
+                </div>
+              ) : (
+                /* ── vide → textarea directement visible ── */
+                <div>
+                  <textarea
+                    value={editFinalVal}
+                    onChange={e=>setEditFinalVal(e.target.value)}
+                    onFocus={()=>setEditingFinal(true)}
+                    rows={4}
+                    placeholder="Rédigez ici le commentaire final du responsable qui sera inclus dans le rapport PDF…"
+                    style={{ width:"100%",padding:"12px 14px",borderRadius:12,border:`1.5px dashed ${C.purple}50`,fontSize:13,color:C.navy,fontFamily:"'Inter',sans-serif",outline:"none",resize:"vertical",boxSizing:"border-box",lineHeight:1.7,background:`${C.purple}04`,cursor:"text" }}
+                  />
+                  <p style={{ fontSize:10,color:C.textMuted,marginTop:6 }}>Cliquez dans le champ pour commencer à rédiger.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -260,6 +260,9 @@ class UserListView(generics.ListAPIView):
 # views.py — VERSION PROPRE (zéro matplotlib/numpy/seaborn)
 
 # views.py — VERSION PROPRE (zéro matplotlib/numpy/seaborn)
+# views.py — VERSION PROPRE (zéro matplotlib/numpy/seaborn)
+# views.py — VERSION PROPRE (zéro matplotlib/numpy/seaborn)
+# views.py — VERSION PROPRE (zéro matplotlib/numpy/seaborn)
 
 import io
 
@@ -329,11 +332,27 @@ class EvaluationViewSet(ModelViewSet):
             qs = qs.filter(session_id=sid)
         return qs
 
+    @action(detail=True, methods=["patch"], url_path="update-commentaire")
+    def update_commentaire(self, request, pk=None):
+        ev = self.get_object()
+        commentaire = request.data.get("commentaire", "")
+        ev.commentaire = commentaire
+        ev.save(update_fields=["commentaire"])
+        return Response({"id": ev.id, "commentaire": ev.commentaire})
+
 
 # ─── Session ──────────────────────────────────────────────
 class EvaluationSessionViewSet(ModelViewSet):
     queryset = EvaluationSession.objects.all()
     serializer_class = EvaluationSessionSerializer
+
+    @action(detail=True, methods=["patch"], url_path="update-commentaire-final")
+    def update_commentaire_final(self, request, pk=None):
+        session = self.get_object()
+        commentaire_final = request.data.get("commentaire_final", "")
+        session.commentaire_final = commentaire_final
+        session.save(update_fields=["commentaire_final"])
+        return Response({"id": session.id, "commentaire_final": session.commentaire_final})
 
     # ── JSON résultats ──────────────────────────────────
     @action(detail=True, methods=["get"])
@@ -601,12 +620,12 @@ class EvaluationSessionViewSet(ModelViewSet):
                            width=w_cm*cm, height=h_cm*cm)
 
         s_chart_title = ParagraphStyle(
-            "CT", parent=st["Normal"],
+            "ChartTitle", parent=st["Normal"],
             fontSize=11, fontName="Helvetica-Bold",
             textColor=NAVY, spaceBefore=10, spaceAfter=4,
         )
         s_analysis = ParagraphStyle(
-            "AN", parent=st["Normal"],
+            "AnalysisText", parent=st["Normal"],
             fontSize=9, textColor=colors.HexColor("#4A5A8A"),
             leading=14, spaceBefore=6, spaceAfter=4,
             leftIndent=10, borderPad=4,
@@ -730,6 +749,61 @@ class EvaluationSessionViewSet(ModelViewSet):
                     pie_analysis(notes_counter_dict),
                     s_analysis
                 ))
+
+        # ── Commentaires individuels (depuis le frontend — filtrés par l'utilisateur) ──
+        commentaires_app = []
+        if request.method == "POST":
+            for item in request.data.get("commentaires_apprenants", []):
+                nom = item.get("nom","").strip()
+                txt = item.get("commentaire","").strip()
+                if nom and txt:
+                    commentaires_app.append((nom, txt))
+
+        if commentaires_app:
+            el.append(Spacer(1, 0.8*cm))
+            el.append(HRFlowable(width="100%", thickness=2, color=BLUE))
+            el.append(Spacer(1, 0.3*cm))
+            el.append(Paragraph("Commentaires des apprenants", s_h2))
+            el.append(Spacer(1, 0.2*cm))
+            s_comment_name = ParagraphStyle(
+                "CommentName", parent=st["Normal"],
+                fontSize=10, fontName="Helvetica-Bold",
+                textColor=NAVY, spaceBefore=6, spaceAfter=2,
+            )
+            s_comment_body = ParagraphStyle(
+                "CommentBody", parent=st["Normal"],
+                fontSize=9, textColor=colors.HexColor("#4A5A8A"),
+                leading=14, leftIndent=12, spaceAfter=6,
+                borderPad=4,
+            )
+            for nom, comment in commentaires_app:
+                el.append(Paragraph(f"▸ {nom}", s_comment_name))
+                el.append(Paragraph(comment, s_comment_body))
+                el.append(HRFlowable(width="90%", thickness=0.5, color=ICE))
+
+        # ── Commentaire final de session ──────────────────────
+        commentaire_final = ""
+        if request.method == "POST":
+            commentaire_final = request.data.get("commentaire_final", "").strip()
+        if not commentaire_final:
+            try:
+                commentaire_final = session.commentaire_final or ""
+            except Exception:
+                commentaire_final = ""
+        if commentaire_final:
+            el.append(Spacer(1, 0.8*cm))
+            el.append(HRFlowable(width="100%", thickness=2, color=BLUE))
+            el.append(Spacer(1, 0.3*cm))
+            el.append(Paragraph("Commentaire final", s_h2))
+            el.append(Spacer(1, 0.2*cm))
+            s_final = ParagraphStyle(
+                "CommentFinal", parent=st["Normal"],
+                fontSize=10, textColor=colors.HexColor("#0D1B5E"),
+                leading=16, leftIndent=10, spaceAfter=8,
+                backColor=colors.HexColor("#F0F4FF"),
+                borderPad=10, borderRadius=4,
+            )
+            el.append(Paragraph(commentaire_final, s_final))
 
         doc.build(el)
         buf.seek(0)
