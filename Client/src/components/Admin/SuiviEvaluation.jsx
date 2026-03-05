@@ -7,7 +7,6 @@ import {
   BookOpen, Edit3, Star, PieChart,
 } from "lucide-react";
 import Chart from "chart.js/auto";
-Chart.register(...registerables);
 import CONFIG from "../../config/config.js";
 
 const C = {
