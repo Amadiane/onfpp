@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronUp, TrendingUp, Users, Send,
   BookOpen, Edit3, Star, PieChart,
 } from "lucide-react";
-import { Chart, registerables } from "chart.js";
+import Chart from "chart.js/auto";
 Chart.register(...registerables);
 import CONFIG from "../../config/config.js";
 
