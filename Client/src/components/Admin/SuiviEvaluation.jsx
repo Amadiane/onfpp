@@ -53,7 +53,7 @@ export default function SuiviEvaluation() {
   const [session, setSession] = useState(null);
 
   return (
-    <div style={{ fontFamily:"'Syne',sans-serif" }}>
+    <div style={{ fontFamily:"'Syne',sans-serif", paddingTop:72 }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&display=swap');
         @keyframes spin   { to{ transform:rotate(360deg) } }
@@ -145,25 +145,6 @@ function SessionsList({ token, onSelect, onNew }) {
           ))}
         </div>
       )}
-
-      {/* ── Bouton flottant toujours visible ── */}
-      <button
-        onClick={onNew}
-        title="Nouvelle session"
-        style={{
-          position:"fixed", bottom:28, right:28, zIndex:200,
-          width:56, height:56, borderRadius:"50%",
-          background:`linear-gradient(135deg,${C.navy},${C.blue})`,
-          border:"none", cursor:"pointer",
-          display:"flex", alignItems:"center", justifyContent:"center",
-          boxShadow:`0 6px 24px rgba(26,59,212,0.35)`,
-          transition:"all .18s",
-        }}
-        onMouseEnter={e=>{e.currentTarget.style.transform="scale(1.1)";e.currentTarget.style.boxShadow=`0 10px 32px rgba(26,59,212,0.5)`;}}
-        onMouseLeave={e=>{e.currentTarget.style.transform="scale(1)";e.currentTarget.style.boxShadow=`0 6px 24px rgba(26,59,212,0.35)`;}}
-      >
-        <Plus size={24} color="#fff" strokeWidth={2.5}/>
-      </button>
     </div>
   );
 }
@@ -289,6 +270,14 @@ function SessionDetail({ token, session, onBack }) {
   const [error,        setError]        = useState("");
 
   const fd = d => d ? new Date(d).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"}) : "—";
+
+  /* ── Modifier / Supprimer la session ── */
+  const [editSession,    setEditSession]    = useState(false);
+  const [editSessionVal, setEditSessionVal] = useState({});
+  const [savingSession,  setSavingSession]  = useState(false);
+  const [deletingSession,setDeletingSession]= useState(false);
+  const [confirmDelSession, setConfirmDelSession] = useState(false);
+  const [sessionData,    setSessionData]    = useState(session); // local mutable copy
 
   /* ─── Chargement initial ─── */
   useEffect(() => {
@@ -423,6 +412,42 @@ function SessionDetail({ token, session, onBack }) {
     finally { setDeletingApp(null); }
   };
 
+  /* ═══ MODIFIER / SUPPRIMER SESSION ═══ */
+
+  const openEditSession = () => {
+    setEditSessionVal({
+      theme:                 sessionData.theme||"",
+      formateur:             sessionData.formateur||"",
+      lieu:                  sessionData.lieu||"",
+      periode_debut:         sessionData.periode_debut||"",
+      periode_fin:           sessionData.periode_fin||"",
+      organisme:             sessionData.organisme||"",
+      structure_beneficiaire:sessionData.structure_beneficiaire||"",
+    });
+    setEditSession(true);
+  };
+
+  const saveSession = async () => {
+    if (!editSessionVal.theme?.trim()) return;
+    setSavingSession(true);
+    try {
+      const r = await authFetch(`${CONFIG.API_SESSIONS}${sessionData.id}/`, token, {
+        method:"PATCH", body:JSON.stringify(editSessionVal),
+      });
+      if (r.ok) { const d = await r.json(); setSessionData(d); setEditSession(false); }
+    } catch {}
+    finally { setSavingSession(false); }
+  };
+
+  const deleteSession = async () => {
+    setDeletingSession(true); setConfirmDelSession(false);
+    try {
+      const r = await authFetch(`${CONFIG.API_SESSIONS}${sessionData.id}/`, token, { method:"DELETE" });
+      if (r.ok||r.status===204) onBack();
+    } catch {}
+    finally { setDeletingSession(false); }
+  };
+
   /* ═══ RÉSULTATS / EXPORTS ═══ */
 
   const loadResults = async () => {
@@ -534,18 +559,90 @@ function SessionDetail({ token, session, onBack }) {
         </div>
       )}
 
+      {/* ── MODAL CONFIRMATION SUPPRESSION SESSION ── */}
+      {confirmDelSession && (
+        <div onClick={()=>setConfirmDelSession(false)} style={{ position:"fixed",inset:0,background:"rgba(13,27,94,0.45)",backdropFilter:"blur(4px)",zIndex:1100,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:C.surface,borderRadius:20,padding:28,width:"100%",maxWidth:400,boxShadow:"0 24px 80px rgba(13,27,94,0.25)",border:"2px solid #FECDD3" }}>
+            <div style={{ width:52,height:52,borderRadius:14,background:"#FFF1F2",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}>
+              <AlertTriangle size={24} color={C.danger}/>
+            </div>
+            <p style={{ fontSize:16,fontWeight:800,color:C.navy,textAlign:"center",marginBottom:8 }}>Supprimer cette session ?</p>
+            <p style={{ fontSize:13,color:C.textSub,textAlign:"center",marginBottom:22 }}>
+              La session <strong>"{sessionData.theme}"</strong> et toutes ses évaluations seront supprimées définitivement.
+            </p>
+            <div style={{ display:"flex",gap:10 }}>
+              <button onClick={()=>setConfirmDelSession(false)} style={{ flex:1,padding:"11px",borderRadius:12,border:`1.5px solid ${C.iceBlue}`,background:C.surfaceAlt,color:C.textSub,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"'Syne',sans-serif" }}>Annuler</button>
+              <button onClick={deleteSession} disabled={deletingSession} style={{ flex:1,padding:"11px",borderRadius:12,border:"none",background:C.danger,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Syne',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
+                {deletingSession?<><Loader2 size={13} style={{animation:"spin 1s linear infinite"}}/> Suppression…</>:<><Trash2 size={13}/> Supprimer</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL ÉDITION SESSION ── */}
+      {editSession && (
+        <div onClick={()=>setEditSession(false)} style={{ position:"fixed",inset:0,background:"rgba(13,27,94,0.45)",backdropFilter:"blur(4px)",zIndex:1100,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:C.surface,borderRadius:20,padding:28,width:"100%",maxWidth:520,boxShadow:"0 24px 80px rgba(13,27,94,0.25)",border:`1.5px solid ${C.iceBlue}` }}>
+            <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20 }}>
+              <p style={{ fontSize:16,fontWeight:800,color:C.navy }}>Modifier la session</p>
+              <button onClick={()=>setEditSession(false)} style={{ width:30,height:30,borderRadius:8,background:C.surfaceAlt,border:`1px solid ${C.iceBlue}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}><X size={13} color={C.textSub}/></button>
+            </div>
+            {/* Champs */}
+            {[
+              {k:"theme",           label:"Thème",              req:true},
+              {k:"formateur",       label:"Formateur",          req:true},
+              {k:"lieu",            label:"Lieu",               req:true},
+              {k:"organisme",       label:"Organisme",          req:false},
+              {k:"structure_beneficiaire", label:"Structure bénéficiaire", req:false},
+            ].map(f=>(
+              <div key={f.k} style={{ marginBottom:12 }}>
+                <L t={f.label} req={f.req}/>
+                <input value={editSessionVal[f.k]||""} onChange={e=>setEditSessionVal(p=>({...p,[f.k]:e.target.value}))}
+                  style={{ width:"100%",padding:"9px 12px",borderRadius:9,border:`1.5px solid ${C.iceBlue}`,fontSize:13,color:C.navy,fontFamily:"'Syne',sans-serif",outline:"none",boxSizing:"border-box" }}/>
+              </div>
+            ))}
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20 }}>
+              <div><L t="Date début"/><input type="date" value={editSessionVal.periode_debut||""} onChange={e=>setEditSessionVal(p=>({...p,periode_debut:e.target.value}))} style={{ width:"100%",padding:"9px 12px",borderRadius:9,border:`1.5px solid ${C.iceBlue}`,fontSize:13,color:C.navy,fontFamily:"'Syne',sans-serif",outline:"none",boxSizing:"border-box" }}/></div>
+              <div><L t="Date fin"/><input type="date" value={editSessionVal.periode_fin||""} onChange={e=>setEditSessionVal(p=>({...p,periode_fin:e.target.value}))} style={{ width:"100%",padding:"9px 12px",borderRadius:9,border:`1.5px solid ${C.iceBlue}`,fontSize:13,color:C.navy,fontFamily:"'Syne',sans-serif",outline:"none",boxSizing:"border-box" }}/></div>
+            </div>
+            <div style={{ display:"flex",gap:10 }}>
+              <button onClick={()=>setEditSession(false)} style={{ flex:1,padding:"11px",borderRadius:12,border:`1.5px solid ${C.iceBlue}`,background:C.surfaceAlt,color:C.textSub,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"'Syne',sans-serif" }}>Annuler</button>
+              <button onClick={saveSession} disabled={savingSession||!editSessionVal.theme?.trim()} style={{ flex:2,padding:"11px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${C.navy},${C.blue})`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Syne',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
+                {savingSession?<><Loader2 size={13} style={{animation:"spin 1s linear infinite"}}/> Sauvegarde…</>:<><CheckCircle2 size={13}/> Enregistrer les modifications</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── En-tête ── */}
       <div style={{ display:"flex",alignItems:"flex-start",gap:14,marginBottom:22 }}>
         <button onClick={onBack} style={{ width:38,height:38,borderRadius:10,background:C.surfaceAlt,border:`1.5px solid ${C.iceBlue}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,marginTop:2 }}>
           <ArrowLeft size={15} color={C.textSub}/>
         </button>
-        <div style={{ flex:1 }}>
-          <h1 style={{ fontSize:20,fontWeight:800,color:C.navy,lineHeight:1.2 }}>{session.theme}</h1>
+        <div style={{ flex:1,minWidth:0 }}>
+          <h1 style={{ fontSize:20,fontWeight:800,color:C.navy,lineHeight:1.2 }}>{sessionData.theme}</h1>
           <div style={{ display:"flex",gap:12,marginTop:6,flexWrap:"wrap" }}>
-            <M icon={User} t={session.formateur}/><M icon={MapPin} t={session.lieu}/>
-            <M icon={Calendar} t={`${fd(session.periode_debut)} → ${fd(session.periode_fin)}`}/>
-            {session.organisme&&<M icon={Building2} t={session.organisme}/>}
+            <M icon={User} t={sessionData.formateur}/><M icon={MapPin} t={sessionData.lieu}/>
+            <M icon={Calendar} t={`${fd(sessionData.periode_debut)} → ${fd(sessionData.periode_fin)}`}/>
+            {sessionData.organisme&&<M icon={Building2} t={sessionData.organisme}/>}
           </div>
+        </div>
+        {/* Boutons Modifier + Supprimer */}
+        <div style={{ display:"flex",gap:8,flexShrink:0,marginTop:2 }}>
+          <button onClick={openEditSession} title="Modifier la session"
+            style={{ display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:10,border:`1.5px solid ${C.iceBlue}`,background:C.surfaceAlt,color:C.textSub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Syne',sans-serif",transition:"all .15s" }}
+            onMouseEnter={e=>{e.currentTarget.style.background=`${C.blue}14`;e.currentTarget.style.borderColor=C.blue;e.currentTarget.style.color=C.blue;}}
+            onMouseLeave={e=>{e.currentTarget.style.background=C.surfaceAlt;e.currentTarget.style.borderColor=C.iceBlue;e.currentTarget.style.color=C.textSub;}}>
+            <Edit3 size={12}/> Modifier
+          </button>
+          <button onClick={()=>setConfirmDelSession(true)} title="Supprimer la session"
+            style={{ display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:10,border:"1.5px solid #FECDD3",background:"#FFF5F5",color:C.danger,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Syne',sans-serif",transition:"all .15s" }}
+            onMouseEnter={e=>{e.currentTarget.style.background="#FECDD3";}}
+            onMouseLeave={e=>{e.currentTarget.style.background="#FFF5F5";}}>
+            <Trash2 size={12}/> Supprimer
+          </button>
         </div>
       </div>
 
@@ -648,7 +745,7 @@ function SessionDetail({ token, session, onBack }) {
                 style={{ width:"100%",marginBottom:16,padding:"14px",borderRadius:14,border:`2px dashed ${criteres.length>0?C.blue:C.iceBlue}`,background:criteres.length>0?`${C.blue}06`:"transparent",color:criteres.length>0?C.blue:C.textMuted,fontSize:13,fontWeight:700,cursor:criteres.length>0?"pointer":"not-allowed",fontFamily:"'Syne',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"all .15s" }}
                 onMouseEnter={e=>{ if(criteres.length>0){e.currentTarget.style.background=`${C.blue}12`;e.currentTarget.style.borderStyle="solid";}}}
                 onMouseLeave={e=>{ e.currentTarget.style.background=criteres.length>0?`${C.blue}06`:"transparent";e.currentTarget.style.borderStyle="dashed";}}>
-                <Plus size={16}/> {criteres.length===0?"Ajoutez d'abord des rubriques":"Évaluer un apprenant"}
+                <Plus size={16}/> {criteres.length===0?"Ajoutez d'abord des rubriques":"Saisir l'évaluation d'un apprenant"}
               </button>
             )}
 
