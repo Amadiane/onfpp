@@ -27,72 +27,89 @@ const Login = () => {
 
   /* ── Connexion ── */
   const handleLogin = async (e) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
+  e.preventDefault();
 
-    try {
-      /* 1. Login → access + refresh */
-      const loginRes = await fetch(`${CONFIG.BASE_URL}${CONFIG.API_LOGIN}`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ username, password }),
-      });
+  setError("");
+  setLoading(true);
 
-      if (!loginRes.ok) {
-        const data = await loginRes.json().catch(() => ({}));
-        setError(data.detail || "Identifiants incorrects.");
-        return;
-      }
+  try {
+    const payload = {
+      username: username.trim(),
+      password: password.trim(),
+    };
 
-      const loginData   = await loginRes.json();
-      const accessToken = loginData.access;
+    console.log("LOGIN PAYLOAD:", payload);
 
-      /* 2. Stocke le token IMMÉDIATEMENT */
-      localStorage.setItem("access",  accessToken);
-      localStorage.setItem("refresh", loginData.refresh || "");
+    const loginRes = await fetch(`${CONFIG.BASE_URL}${CONFIG.API_LOGIN}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
 
-      /* 3. Fetch /api/me/ avec le token frais (pas localStorage) */
-      const meRes = await fetch(`${CONFIG.BASE_URL}${CONFIG.API_ME}`, {
-        headers: {
-          "Authorization": `Bearer ${accessToken}`,
-          "Content-Type":  "application/json",
-        },
-      });
+    const data = await loginRes.json().catch(() => ({}));
 
-      if (meRes.ok) {
-        const u = await meRes.json();
-        localStorage.setItem("user", JSON.stringify({
-          id:        u.id,
-          username:  u.username,
-          firstName: u.first_name,
-          lastName:  u.last_name,
-          email:     u.email,
-          role:      u.role,    // "Directeur Général"
-          niveau:    u.niveau,  // 8
-          region:    u.region,  // "Conakry"
-          centre:    u.centre,  // "Antenne de Ratoma"
-        }));
-      } else {
-        /* Fallback : infos du JWT */
-        localStorage.setItem("user", JSON.stringify({
-          username: loginData.username || username,
-          role:     loginData.role     || null,
-          niveau:   loginData.niveau   || 0,
-          region:   loginData.region   || null,
-          centre:   loginData.centre   || null,
-        }));
-      }
+    console.log("LOGIN RESPONSE:", data);
 
-      /* 4. Redirection */
-      navigate("/dashboardAdmin");
-
-    } catch {
-      setError("Erreur réseau. Vérifiez votre connexion.");
-    } finally {
+    if (!loginRes.ok) {
+      setError(
+        data.detail ||
+        data.error ||
+        "Identifiants incorrects ou requête invalide."
+      );
       setLoading(false);
+      return;
     }
-  };
+
+    const accessToken = data.access;
+
+    if (!accessToken) {
+      setError("Token non reçu depuis le serveur.");
+      setLoading(false);
+      return;
+    }
+
+    /* Stockage tokens */
+    localStorage.setItem("access", accessToken);
+    localStorage.setItem("refresh", data.refresh || "");
+
+    /* Récupération utilisateur */
+    const meRes = await fetch(`${CONFIG.BASE_URL}${CONFIG.API_ME}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (meRes.ok) {
+      const u = await meRes.json();
+
+      localStorage.setItem(
+        "user",
+        JSON.stringify({
+          id: u.id,
+          username: u.username,
+          firstName: u.first_name,
+          lastName: u.last_name,
+          email: u.email,
+          role: u.role,
+          niveau: u.niveau,
+          region: u.region,
+          centre: u.centre,
+        })
+      );
+    }
+
+    navigate("/dashboardAdmin");
+
+  } catch (err) {
+    console.error("LOGIN ERROR:", err);
+    setError("Erreur réseau. Vérifiez votre connexion.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   /* ── Style ── */
   const inputStyle = (name) => ({
