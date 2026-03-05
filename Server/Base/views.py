@@ -71,6 +71,10 @@ from .serializers import (
 class CustomLoginView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
+    def post(self, request, *args, **kwargs):
+        print("LOGIN DATA:", request.data)
+        return super().post(request, *args, **kwargs)
+
 
 # ── Utilisateur connecté ─────────────────────────────────────
 class MeView(APIView):

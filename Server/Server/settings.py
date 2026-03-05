@@ -29,17 +29,12 @@ SECRET_KEY = 'django-insecure-=vzk5kihpjq$+83ivg-bqelulmewy!_cqvda%z^zm63ht1j#v-
 DEBUG = False
 
 # ALLOWED_HOSTS = ['*']
-import os
-
-ENV = os.environ.get("ENV", "local")  # par défaut 'local'
-
-if ENV == "prod":
-    ALLOWED_HOSTS = [
-        "onfpp.onrender.com",
-        "www.onfpp.onrender.com",
-    ]
-else:
-    ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS = [
+    "onfpp.onrender.com",
+    "www.onfpp.onrender.com",
+    "localhost",
+    "127.0.0.1",
+]
 
 # Application definition
 
