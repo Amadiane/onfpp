@@ -108,7 +108,15 @@ function SessionsList({ token, onSelect, onNew }) {
 
       {/* Liste */}
       {loading ? <Spin/> : error ? <Err msg={error}/> : lst.length===0 ? (
-        <Empty label={search?"Aucun résultat.":"Aucune session."} onAction={!search?onNew:null} act="Créer la première"/>
+        <div style={{ textAlign:"center",padding:"44px 20px",color:C.textMuted }}>
+          <ClipboardList size={34} style={{ margin:"0 auto 10px",opacity:.2,display:"block" }}/>
+          <p style={{ fontWeight:700,fontSize:13 }}>{search ? "Aucun résultat pour cette recherche." : "Aucune session créée pour l'instant."}</p>
+          {!search && (
+            <button onClick={onNew} style={{ marginTop:16,display:"inline-flex",alignItems:"center",gap:8,padding:"12px 24px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${C.navy},${C.blue})`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Syne',sans-serif",boxShadow:`0 4px 16px ${C.shadow}` }}>
+              <Plus size={15}/> Créer la première session
+            </button>
+          )}
+        </div>
       ) : (
         <div style={{ display:"grid",gap:12 }}>
           {lst.map(s=>(
@@ -137,6 +145,25 @@ function SessionsList({ token, onSelect, onNew }) {
           ))}
         </div>
       )}
+
+      {/* ── Bouton flottant toujours visible ── */}
+      <button
+        onClick={onNew}
+        title="Nouvelle session"
+        style={{
+          position:"fixed", bottom:28, right:28, zIndex:200,
+          width:56, height:56, borderRadius:"50%",
+          background:`linear-gradient(135deg,${C.navy},${C.blue})`,
+          border:"none", cursor:"pointer",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          boxShadow:`0 6px 24px rgba(26,59,212,0.35)`,
+          transition:"all .18s",
+        }}
+        onMouseEnter={e=>{e.currentTarget.style.transform="scale(1.1)";e.currentTarget.style.boxShadow=`0 10px 32px rgba(26,59,212,0.5)`;}}
+        onMouseLeave={e=>{e.currentTarget.style.transform="scale(1)";e.currentTarget.style.boxShadow=`0 6px 24px rgba(26,59,212,0.35)`;}}
+      >
+        <Plus size={24} color="#fff" strokeWidth={2.5}/>
+      </button>
     </div>
   );
 }
