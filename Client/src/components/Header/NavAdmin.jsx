@@ -69,16 +69,13 @@ const buildNavCategories = (role, counts = {}) => {
     { title:"Formations", color:C.sky, icon:BookOpen, roles:["DG","CD","DR","CC","FORMATEUR"], items:[
       { path:"/formations",    label:"Catalogue formations",  icon:BookOpen,     roles:["DG","CD","DR","CC","FORMATEUR"] },
       { path:"/sessions",      label:"Sessions planifiées",   icon:CalendarDays, roles:["DG","CD","DR","CC","FORMATEUR"] },
-      { path:"/programmes",    label:"Programmes & modules",  icon:Layers,       roles:["DG","CD","DR","CC"] },
       { path:"/certifications",label:"Certifications",        icon:Award,        roles:["DG","CD","DR","CC","FORMATEUR"] },
     ]},
     { title:"Apprenants", color:"#0369A1", icon:GraduationCap, roles:["DG","CD","DR","CC","FORMATEUR"], items:[
       { path:"/inscription",    label:"Inscriptions",          icon:GraduationCap, roles:["DG","CD","DR","CC","FORMATEUR"] },
       { path:"/apprenants",     label:"Apprenants actifs",     icon:GraduationCap, roles:["DG","CD","DR","CC","FORMATEUR"] },
-      { path:"/listeCandidats", label:"Inscrits & candidats",  icon:UserCheck,     roles:["DG","CD","DR","CC"], count:counts.community },
-      { path:"/validation",     label:"Validation dossiers",   icon:CheckCircle2,  roles:["DG","CD","DR","CC"] },
       { path:"/suivi",          label:"Suivi pédagogique",     icon:ClipboardList, roles:["DG","CD","DR","CC","FORMATEUR"] },
-      { path:"/suivi",          label:"Insertion",             icon:ClipboardList, roles:["DG","CD","DR","CC","FORMATEUR"] },
+      
     ]},
     { title:"Présences & Notes", color:C.success, icon:ClipboardList, roles:["CC","FORMATEUR"], items:[
       { path:"/presences",   label:"Feuilles de présence",  icon:CalendarDays,  roles:["CC","FORMATEUR"] },
@@ -102,18 +99,18 @@ const buildNavCategories = (role, counts = {}) => {
       { path:"/entreprises",   label:"Base des entreprises", icon:Briefcase, roles:["DG","CD","DR"] },
       { path:"/offres-emploi", label:"Offres d'emploi",      icon:Package,   roles:["DG","CD","DR"] },
     ]},
-    { title:"Rapports", color:C.purple, icon:BarChart3, roles:["DG","CD","DR","CC"], items:[
-      { path:"/statistiques",      label:"Statistiques globales",   icon:PieChart,  roles:["DG","CD"] },
-      { path:"/statistiques",      label:"Statistiques régionales", icon:PieChart,  roles:["DR"] },
-      { path:"/statistiques",      label:"Statistiques du centre",  icon:BarChart3, roles:["CC"] },
-      { path:"/dashboardRegional", label:"Tableau régional",        icon:MapPin,    roles:["DG","CD","DR"] },
-      { path:"/rapports",          label:"Rapports & exports",      icon:FileText,  roles:["DG","CD","DR","CC"] },
-    ]},
-    { title:"Centres & Équipes", color:C.purple, icon:Building2, roles:["DG","CD","DR"], items:[
-      { path:"/centresFormation", label:"Centres de formation", icon:Building2, roles:["DG","CD","DR"] },
-      { path:"/teamMessage",      label:"Équipe & formateurs",  icon:Users,     roles:["DG","CD","DR","CC"] },
-      { path:"/partnerPost",      label:"Partenaires",          icon:Package,   roles:["DG","CD"] },
-    ]},
+    // { title:"Rapports", color:C.purple, icon:BarChart3, roles:["DG","CD","DR","CC"], items:[
+    //   { path:"/statistiques",      label:"Statistiques globales",   icon:PieChart,  roles:["DG","CD"] },
+    //   { path:"/statistiques",      label:"Statistiques régionales", icon:PieChart,  roles:["DR"] },
+    //   { path:"/statistiques",      label:"Statistiques du centre",  icon:BarChart3, roles:["CC"] },
+    //   { path:"/dashboardRegional", label:"Tableau régional",        icon:MapPin,    roles:["DG","CD","DR"] },
+    //   { path:"/rapports",          label:"Rapports & exports",      icon:FileText,  roles:["DG","CD","DR","CC"] },
+    // ]},
+    // { title:"Centres & Équipes", color:C.purple, icon:Building2, roles:["DG","CD","DR"], items:[
+    //   { path:"/centresFormation", label:"Centres de formation", icon:Building2, roles:["DG","CD","DR"] },
+    //   { path:"/teamMessage",      label:"Équipe & formateurs",  icon:Users,     roles:["DG","CD","DR","CC"] },
+    //   { path:"/partnerPost",      label:"Partenaires",          icon:Package,   roles:["DG","CD"] },
+    // ]},
     { title:"Administration", color:"#64748B", icon:Settings, roles:["DG","CD","SUPERADMIN"], items:[
       { path:"/addUser",    label:"Gestion utilisateurs", icon:UserCog,  roles:["DG","CD","SUPERADMIN"] },
       { path:"/parametres", label:"Paramètres système",   icon:Settings, roles:["DG","CD","SUPERADMIN"] },
