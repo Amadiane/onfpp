@@ -85,10 +85,9 @@ const buildNavCategories = (role, counts = {}) => {
     { title:"Suivi complet", color:C.success, icon:ClipboardList, roles:["DG","CD","DR"], items:[
       { path:"/presences",         label:"Présences",               icon:CalendarDays, roles:["DG","CD","DR"] },
       { path:"/suiviEvaluation",   label:"Évaluations",             icon:Award,        roles:["DG","CD","DR"] },
-      { path:"/resultats",         label:"Résultats finaux",        icon:CheckCircle2, roles:["DG","CD","DR"] },
       { path:"/attestations",      label:"Attestations PDF",        icon:FileText,     roles:["DG","CD","DR"] },
       { path:"/enquete-insertion", label:"Enquête insertion 3 mois",icon:Clock,        roles:["DG","CD","DR"] },
-      { path:"/relances",          label:"Relances automatiques",   icon:Bell,         roles:["DG","CD"] },
+     
     ]},
     { title:"Fin de session", color:C.accent, icon:CheckCircle2, roles:["CC","FORMATEUR"], items:[
       { path:"/resultats",         label:"Résultats finaux",        icon:CheckCircle2, roles:["CC","FORMATEUR"] },
@@ -112,8 +111,10 @@ const buildNavCategories = (role, counts = {}) => {
     //   { path:"/partnerPost",      label:"Partenaires",          icon:Package,   roles:["DG","CD"] },
     // ]},
     { title:"Administration", color:"#64748B", icon:Settings, roles:["DG","CD","SUPERADMIN"], items:[
+      { path:"/parametres", label:"Division Planification",   icon:Settings, roles:["DG","CD","SUPERADMIN"] },
+      { path:"/parametres", label:"Division Apprentissage",   icon:Settings, roles:["DG","CD","SUPERADMIN"] },
+      { path:"/parametres", label:"Division Suivi Evaluation",   icon:Settings, roles:["DG","CD","SUPERADMIN"] },
       { path:"/addUser",    label:"Gestion utilisateurs", icon:UserCog,  roles:["DG","CD","SUPERADMIN"] },
-      { path:"/parametres", label:"Paramètres système",   icon:Settings, roles:["DG","CD","SUPERADMIN"] },
       { path:"/homePost",   label:"Contenu site public",  icon:Layers,   roles:["DG","CD"] },
     ]},
   ];
