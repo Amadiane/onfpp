@@ -17,7 +17,7 @@ router.register(r'sessions', EvaluationSessionViewSet)
 router.register(r'criteres', CritereViewSet)
 router.register(r'apprenants', ApprenantViewSet)
 router.register(r'evaluations', EvaluationViewSet)
-router.register(r'candidats', CandidatViewSet)
+router.register(r"candidats", CandidatViewSet, basename="candidat")
 
 
 

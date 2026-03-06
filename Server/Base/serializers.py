@@ -192,16 +192,93 @@ class ApprenantResultSerializer(serializers.Serializer):
 
 
 
+# serializers.py
 
-
-#Inscription Candidat 
 from rest_framework import serializers
 from .models import Candidat
 
 
 class CandidatSerializer(serializers.ModelSerializer):
 
+    # Affiche le nom du centre en lecture (sans casser le FK en écriture)
+    antenne_nom = serializers.CharField(
+        source="antenne.nom",
+        read_only=True,
+        default=None,
+    )
+
+    # Affiche le nom complet du créateur
+    created_by_nom = serializers.SerializerMethodField()
+
     class Meta:
-        model = Candidat
-        fields = "__all__"
-        read_only_fields = ["statut_fiche", "identifiant_unique"]
+        model  = Candidat
+        fields = [
+            # Identité
+            "id",
+            "nom",
+            "prenom",
+            "sexe",
+            "date_naissance",
+            "telephone",
+            "email",
+            "adresse",
+            # Formation
+            "niveau_etude",
+            "metier_souhaite",
+            # Antenne
+            "antenne",
+            "antenne_nom",
+            # Gestion fiche
+            "statut_fiche",
+            "identifiant_unique",
+            # Traçabilité
+            "created_by",
+            "created_by_nom",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "statut_fiche",        # géré par workflow de validation
+            "identifiant_unique",  # généré automatiquement après validation
+            "created_by",          # défini dans perform_create
+            "created_by_nom",
+            "created_at",
+            "updated_at",
+            "antenne_nom",
+        ]
+
+    def get_created_by_nom(self, obj):
+        if obj.created_by:
+            fn = getattr(obj.created_by, "first_name", "") or ""
+            ln = getattr(obj.created_by, "last_name",  "") or ""
+            full = f"{fn} {ln}".strip()
+            return full or obj.created_by.username
+        return None
+
+    def validate_email(self, value):
+        """Accepte null/vide, vérifie l'unicité si fourni."""
+        if not value:
+            return None
+        qs = Candidat.objects.filter(email=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("Un candidat avec cet email existe déjà.")
+        return value
+
+    def validate_telephone(self, value):
+        if not value:
+            return None
+        return value
+
+    def validate(self, data):
+        # Convertit les chaînes vides en None pour les champs optionnels
+        optional_fields = [
+            "sexe", "date_naissance", "telephone", "email",
+            "adresse", "niveau_etude", "metier_souhaite",
+        ]
+        for field in optional_fields:
+            if field in data and data[field] == "":
+                data[field] = None
+        return data

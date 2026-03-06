@@ -118,8 +118,9 @@ class Evaluation(models.Model):
 
 
 
+# models.py
 
-    from django.db import models
+from django.db import models
 from django.conf import settings
 
 
@@ -131,60 +132,63 @@ class Candidat(models.Model):
         ("rejete", "Rejeté"),
     ]
 
-    # Informations personnelles
-    nom = models.CharField(max_length=100)
-    prenom = models.CharField(max_length=100)
+    SEXE_CHOICES = [
+        ("H", "Homme"),
+        ("F", "Femme"),
+    ]
 
-    sexe = models.CharField(
-        max_length=10,
-        choices=[("H", "Homme"), ("F", "Femme")],
-        blank=True,
-        null=True
-    )
-
+    # ── Informations personnelles ──────────────────────
+    nom            = models.CharField(max_length=100)
+    prenom         = models.CharField(max_length=100)
+    sexe           = models.CharField(max_length=10, choices=SEXE_CHOICES, blank=True, null=True)
     date_naissance = models.DateField(blank=True, null=True)
+    telephone      = models.CharField(max_length=20, blank=True, null=True)
+    email          = models.EmailField(blank=True, null=True)
+    adresse        = models.TextField(blank=True, null=True)
 
-    telephone = models.CharField(max_length=20, blank=True, null=True)
-
-    email = models.EmailField(blank=True, null=True)
-
-    adresse = models.TextField(blank=True, null=True)
-
-    # Informations formation
-    niveau_etude = models.CharField(max_length=100, blank=True, null=True)
-
+    # ── Informations formation ─────────────────────────
+    niveau_etude    = models.CharField(max_length=100, blank=True, null=True)
     metier_souhaite = models.CharField(max_length=150, blank=True, null=True)
 
+    # ── Antenne de rattachement ────────────────────────
     antenne = models.ForeignKey(
         "Centre",
         on_delete=models.SET_NULL,
         null=True,
-        blank=True
+        blank=True,
+        related_name="candidats",
     )
 
-    # Gestion fiche
+    # ── Gestion de la fiche ────────────────────────────
     statut_fiche = models.CharField(
         max_length=20,
         choices=STATUT_FICHE,
-        default="en_attente"
+        default="en_attente",
     )
 
-    # Identifiant apprenant (généré après validation)
+    # Identifiant unique généré après validation
     identifiant_unique = models.CharField(
         max_length=50,
         blank=True,
         null=True,
-        unique=True
+        unique=True,
     )
 
-    # Utilisateur qui a créé la fiche
+    # ── Traçabilité ────────────────────────────────────
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
-        null=True
+        null=True,
+        blank=True,
+        related_name="candidats_crees",
     )
-
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Candidat"
+        verbose_name_plural = "Candidats"
 
     def __str__(self):
         return f"{self.nom} {self.prenom}"

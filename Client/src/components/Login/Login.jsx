@@ -27,89 +27,107 @@ const Login = () => {
 
   /* ── Connexion ── */
   const handleLogin = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
+    setError("");
+    setLoading(true);
 
-  setError("");
-  setLoading(true);
+    try {
+      /* 1. Login → access + refresh */
+      const loginRes = await fetch(`${CONFIG.BASE_URL}${CONFIG.API_LOGIN}`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ username, password }),
+      });
 
-  try {
-    const payload = {
-      username: username.trim(),
-      password: password.trim(),
-    };
+      if (!loginRes.ok) {
+        const data = await loginRes.json().catch(() => ({}));
+        setError(data.detail || "Identifiants incorrects.");
+        return;
+      }
 
-    console.log("LOGIN PAYLOAD:", payload);
+      const loginData   = await loginRes.json();
+      const accessToken = loginData.access;
 
-    const loginRes = await fetch(`${CONFIG.BASE_URL}${CONFIG.API_LOGIN}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+      /* 2. Stocke le token IMMÉDIATEMENT */
+      localStorage.setItem("access",  accessToken);
+      localStorage.setItem("refresh", loginData.refresh || "");
 
-    const data = await loginRes.json().catch(() => ({}));
+      /* ── 3. Récupération profil /api/me/ avec le token frais ── */
+      let userProfile = null;
 
-    console.log("LOGIN RESPONSE:", data);
+      try {
+        const meRes = await fetch(`${CONFIG.BASE_URL}${CONFIG.API_ME}`, {
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type":  "application/json",
+          },
+        });
 
-    if (!loginRes.ok) {
-      setError(
-        data.detail ||
-        data.error ||
-        "Identifiants incorrects ou requête invalide."
-      );
+        if (meRes.ok) {
+          /* ✅ /api/me/ répond correctement */
+          const u = await meRes.json();
+          userProfile = {
+            id:        u.id,
+            username:  u.username        || loginData.username || username,
+            firstName: u.first_name      || "",
+            lastName:  u.last_name       || "",
+            email:     u.email           || "",
+            role:      u.role            || loginData.role   || null,
+            niveau:    u.niveau          ?? loginData.niveau ?? 0,
+            region:    u.region          || loginData.region || null,
+            centre:    u.centre          || loginData.centre || null,
+          };
+        } else {
+          /* ⚠️ /api/me/ retourne 403/401 → décode le JWT payload */
+          console.warn(`[Login] /api/me/ retourné ${meRes.status} — fallback JWT payload`);
+          try {
+            const jwtPayload = JSON.parse(atob(accessToken.split(".")[1]));
+            userProfile = {
+              id:        jwtPayload.user_id    || null,
+              username:  jwtPayload.username   || loginData.username || username,
+              firstName: jwtPayload.first_name || "",
+              lastName:  jwtPayload.last_name  || "",
+              email:     jwtPayload.email      || "",
+              role:      jwtPayload.role       || loginData.role   || null,
+              niveau:    jwtPayload.niveau     ?? loginData.niveau ?? 0,
+              region:    jwtPayload.region     || loginData.region || null,
+              centre:    jwtPayload.centre     || loginData.centre || null,
+            };
+          } catch {
+            /* JWT non décodable → utilise ce que /api/login/ a renvoyé */
+            userProfile = {
+              username: loginData.username || username,
+              role:     loginData.role     || null,
+              niveau:   loginData.niveau   ?? 0,
+              region:   loginData.region   || null,
+              centre:   loginData.centre   || null,
+            };
+          }
+        }
+      } catch {
+        /* Erreur réseau sur /api/me/ — on utilise les données du login */
+        userProfile = {
+          username: loginData.username || username,
+          role:     loginData.role     || null,
+          niveau:   loginData.niveau   ?? 0,
+          region:   loginData.region   || null,
+          centre:   loginData.centre   || null,
+        };
+      }
+
+      /* ✅ Stocke le profil — toujours renseigné même si /api/me/ a échoué */
+      localStorage.setItem("user", JSON.stringify(userProfile));
+      console.log("[Login] Profil stocké :", userProfile);
+
+      /* 4. Redirection */
+      navigate("/dashboardAdmin");
+
+    } catch {
+      setError("Erreur réseau. Vérifiez votre connexion.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const accessToken = data.access;
-
-    if (!accessToken) {
-      setError("Token non reçu depuis le serveur.");
-      setLoading(false);
-      return;
-    }
-
-    /* Stockage tokens */
-    localStorage.setItem("access", accessToken);
-    localStorage.setItem("refresh", data.refresh || "");
-
-    /* Récupération utilisateur */
-    const meRes = await fetch(`${CONFIG.BASE_URL}${CONFIG.API_ME}`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (meRes.ok) {
-      const u = await meRes.json();
-
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          id: u.id,
-          username: u.username,
-          firstName: u.first_name,
-          lastName: u.last_name,
-          email: u.email,
-          role: u.role,
-          niveau: u.niveau,
-          region: u.region,
-          centre: u.centre,
-        })
-      );
-    }
-
-    navigate("/dashboardAdmin");
-
-  } catch (err) {
-    console.error("LOGIN ERROR:", err);
-    setError("Erreur réseau. Vérifiez votre connexion.");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   /* ── Style ── */
   const inputStyle = (name) => ({

@@ -1,56 +1,3 @@
-# # views.py
-# from rest_framework import generics, viewsets
-# from rest_framework.views import APIView
-# from rest_framework.response import Response
-# from rest_framework.exceptions import PermissionDenied
-# from rest_framework_simplejwt.views import TokenObtainPairView
-# from rest_framework import permissions
-
-# from .models import User, Role, Region, Centre
-# from .serializers import UserCreateSerializer, CustomTokenObtainPairSerializer, RoleSerializer, RegionSerializer, CentreSerializer
-# from .permissions import IsHighLevelUser
-
-# # ------------------ LOGIN ------------------
-# class CustomLoginView(TokenObtainPairView):
-#     serializer_class = CustomTokenObtainPairSerializer
-
-# # ------------------ CREATE USER ------------------
-# from rest_framework.permissions import AllowAny
-# class UserCreateView(generics.CreateAPIView):
-#     serializer_class = UserCreateSerializer
-#     # permission_classes = [IsHighLevelUser]
-#     permission_classes = [AllowAny]  # 👈 juste pour tester
-
-# # ------------------ CONNECTED USER ------------------
-# class MeView(APIView):
-#     permission_classes = [permissions.IsAuthenticated]
-
-#     def get(self, request):
-#         user = request.user
-#         return Response({
-#             "username": user.username,
-#             "role": user.role.name if user.role else None,
-#             "region": user.region.id if user.region else None,
-#             "centre": user.centre.id if user.centre else None,
-#         })
-
-# # ------------------ ROLE / REGION / CENTRE ------------------
-# class RoleViewSet(viewsets.ReadOnlyModelViewSet):
-#     queryset = Role.objects.all()
-#     serializer_class = RoleSerializer
-#     permission_classes = [permissions.IsAuthenticated]
-
-# class RegionViewSet(viewsets.ReadOnlyModelViewSet):
-#     queryset = Region.objects.all()
-#     serializer_class = RegionSerializer
-#     permission_classes = [permissions.IsAuthenticated]
-
-# class CentreViewSet(viewsets.ReadOnlyModelViewSet):
-#     queryset = Centre.objects.all()
-#     serializer_class = CentreSerializer
-#     permission_classes = [permissions.IsAuthenticated]
-
-
 
 # views.py — fichier COMPLET
 
@@ -68,31 +15,116 @@ from .serializers import (
 
 
 # ── Login JWT ────────────────────────────────────────────────
-class CustomLoginView(TokenObtainPairView):
-    serializer_class = CustomTokenObtainPairSerializer
+# class CustomLoginView(TokenObtainPairView):
+#     serializer_class = CustomTokenObtainPairSerializer
 
-    def post(self, request, *args, **kwargs):
-        print("LOGIN DATA:", request.data)
-        return super().post(request, *args, **kwargs)
+#     def post(self, request, *args, **kwargs):
+#         print("LOGIN DATA:", request.data)
+#         return super().post(request, *args, **kwargs)
 
 
-# ── Utilisateur connecté ─────────────────────────────────────
-class MeView(APIView):
-    permission_classes = [IsAuthenticated]
+# # ── Utilisateur connecté ─────────────────────────────────────
+# class MeView(APIView):
+#     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
-        user = request.user
-        return Response({
-            "id":         user.id,
-            "username":   user.username,
-            "first_name": user.first_name,
-            "last_name":  user.last_name,
-            "email":      user.email,
-            "role":       user.role.name   if user.role   else None,
-            "niveau":     user.role.level  if user.role   else 0,
-            "region":     user.region.name if user.region else None,
-            "centre":     user.centre.name if user.centre else None,
-        })
+#     def get(self, request):
+#         user = request.user
+#         return Response({
+#             "id":         user.id,
+#             "username":   user.username,
+#             "first_name": user.first_name,
+#             "last_name":  user.last_name,
+#             "email":      user.email,
+#             "role":       user.role.name   if user.role   else None,
+#             "niveau":     user.role.level  if user.role   else 0,
+#             "region":     user.region.name if user.region else None,
+#             "centre":     user.centre.name if user.centre else None,
+#         })
+
+# views_auth.py  — À ajouter dans ton fichier views.py principal
+#
+# Problème : /api/me/ retourne 403 car la vue n'est pas protégée
+# correctement OU le token n'est pas lu par Django.
+# Solution : utiliser IsAuthenticated + SimpleJWT correctement.
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import authenticate
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+
+# ── 1. LOGIN ────────────────────────────────────────────────────────
+# POST /api/login/
+# Retourne access + refresh + infos utilisateur complètes
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def login_view(request):
+    username = request.data.get("username", "").strip()
+    password = request.data.get("password", "")
+
+    if not username or not password:
+        return Response(
+            {"detail": "Nom d'utilisateur et mot de passe requis."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user = authenticate(request, username=username, password=password)
+
+    if user is None:
+        return Response(
+            {"detail": "Identifiants incorrects."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    if not user.is_active:
+        return Response(
+            {"detail": "Ce compte est désactivé."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # Génère les tokens JWT
+    refresh = RefreshToken.for_user(user)
+    access  = str(refresh.access_token)
+
+    return Response({
+        "access":   access,
+        "refresh":  str(refresh),
+        "username": user.username,
+        "role":     getattr(user, "role",   None),
+        "niveau":   getattr(user, "niveau", 0),
+        "region":   getattr(user, "region", None),
+        "centre":   getattr(user, "centre", None),
+    })
+
+
+# ── 2. ME ────────────────────────────────────────────────────────────
+# GET /api/me/
+# Retourne le profil complet de l'utilisateur connecté.
+# ⚠️  NÉCESSITE : permission_classes = [IsAuthenticated]
+#     + DEFAULT_AUTHENTICATION_CLASSES = JWTAuthentication dans settings.py
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])   # ← NE PAS mettre AllowAny ici
+def me_view(request):
+    user = request.user
+    return Response({
+        "id":         user.id,
+        "username":   user.username,
+        "first_name": user.first_name,
+        "last_name":  user.last_name,
+        "email":      user.email,
+        "role":       getattr(user, "role",   None),
+        "niveau":     getattr(user, "niveau", 0),
+        "region":     getattr(user, "region", None),
+        "centre":     getattr(user, "centre", None),
+        "is_staff":   user.is_staff,
+    })
 
 
 # ── Créer un utilisateur ─────────────────────────────────────
@@ -820,17 +852,88 @@ class EvaluationSessionViewSet(ModelViewSet):
 
 
 #Inscription candidat View
-from rest_framework import viewsets, permissions
+# views.py  (section Candidat)
+
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django.db.models import Q
+
 from .models import Candidat
 from .serializers import CandidatSerializer
 
 
 class CandidatViewSet(viewsets.ModelViewSet):
+    """
+    CRUD complet pour les candidats.
+    Endpoints générés automatiquement :
+      GET    /api/candidats/          → liste
+      POST   /api/candidats/          → créer
+      GET    /api/candidats/{id}/     → détail
+      PUT    /api/candidats/{id}/     → modifier (tous les champs)
+      PATCH  /api/candidats/{id}/     → modifier (champs partiels)
+      DELETE /api/candidats/{id}/     → supprimer
+    Endpoint custom :
+      PATCH  /api/candidats/{id}/valider/  → valider la fiche
+      PATCH  /api/candidats/{id}/rejeter/  → rejeter la fiche
+    """
 
-    queryset = Candidat.objects.all().order_by("-created_at")
-    serializer_class = CandidatSerializer
-    # permission_classes = [permissions.IsAuthenticated]
-    permission_classes = [AllowAny]
+    queryset           = Candidat.objects.all().order_by("-created_at")
+    serializer_class   = CandidatSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
+    # ── Recherche & filtrage ───────────────────────────────
+    def get_queryset(self):
+        qs = Candidat.objects.all().order_by("-created_at")
+
+        # Recherche textuelle ?search=
+        search = self.request.query_params.get("search", "").strip()
+        if search:
+            qs = qs.filter(
+                Q(nom__icontains=search)          |
+                Q(prenom__icontains=search)       |
+                Q(email__icontains=search)        |
+                Q(telephone__icontains=search)    |
+                Q(metier_souhaite__icontains=search)
+            )
+
+        # Filtre statut ?statut=en_attente|valide|rejete
+        statut = self.request.query_params.get("statut", "").strip()
+        if statut in ("en_attente", "valide", "rejete"):
+            qs = qs.filter(statut_fiche=statut)
+
+        # Filtre antenne ?antenne=<id>
+        antenne_id = self.request.query_params.get("antenne", "").strip()
+        if antenne_id.isdigit():
+            qs = qs.filter(antenne_id=int(antenne_id))
+
+        return qs
+
+    # ── Création : on associe l'utilisateur courant ────────
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    # ── Action custom : valider une fiche ─────────────────
+    @action(detail=True, methods=["patch"], url_path="valider")
+    def valider(self, request, pk=None):
+        candidat = self.get_object()
+        if candidat.statut_fiche == "valide":
+            return Response(
+                {"detail": "Ce candidat est déjà validé."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        candidat.statut_fiche = "valide"
+        # Génère un identifiant unique si non encore attribué
+        if not candidat.identifiant_unique:
+            import uuid
+            candidat.identifiant_unique = f"ONFPP-{uuid.uuid4().hex[:8].upper()}"
+        candidat.save()
+        return Response(CandidatSerializer(candidat).data)
+
+    # ── Action custom : rejeter une fiche ─────────────────
+    @action(detail=True, methods=["patch"], url_path="rejeter")
+    def rejeter(self, request, pk=None):
+        candidat = self.get_object()
+        candidat.statut_fiche = "rejete"
+        candidat.save()
+        return Response(CandidatSerializer(candidat).data)
