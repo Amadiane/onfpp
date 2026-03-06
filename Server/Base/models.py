@@ -52,24 +52,6 @@ class User(AbstractUser):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # models.py
 
 from django.db import models
@@ -132,3 +114,77 @@ class Evaluation(models.Model):
     critere = models.ForeignKey(Critere, on_delete=models.CASCADE)
     note = models.IntegerField(choices=NOTE_CHOICES)
     commentaire = models.TextField(blank=True, null=True)
+
+
+
+
+
+    from django.db import models
+from django.conf import settings
+
+
+class Candidat(models.Model):
+
+    STATUT_FICHE = [
+        ("en_attente", "En attente"),
+        ("valide", "Validé"),
+        ("rejete", "Rejeté"),
+    ]
+
+    # Informations personnelles
+    nom = models.CharField(max_length=100)
+    prenom = models.CharField(max_length=100)
+
+    sexe = models.CharField(
+        max_length=10,
+        choices=[("H", "Homme"), ("F", "Femme")],
+        blank=True,
+        null=True
+    )
+
+    date_naissance = models.DateField(blank=True, null=True)
+
+    telephone = models.CharField(max_length=20, blank=True, null=True)
+
+    email = models.EmailField(blank=True, null=True)
+
+    adresse = models.TextField(blank=True, null=True)
+
+    # Informations formation
+    niveau_etude = models.CharField(max_length=100, blank=True, null=True)
+
+    metier_souhaite = models.CharField(max_length=150, blank=True, null=True)
+
+    antenne = models.ForeignKey(
+        "Centre",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    # Gestion fiche
+    statut_fiche = models.CharField(
+        max_length=20,
+        choices=STATUT_FICHE,
+        default="en_attente"
+    )
+
+    # Identifiant apprenant (généré après validation)
+    identifiant_unique = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        unique=True
+    )
+
+    # Utilisateur qui a créé la fiche
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.nom} {self.prenom}"

@@ -19,42 +19,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         })
         return data
 
-# ------------------ USER CREATE ------------------
-# class UserCreateSerializer(serializers.ModelSerializer):
-#     password = serializers.CharField(write_only=True)
-#     role = serializers.PrimaryKeyRelatedField(queryset=Role.objects.all(), required=False, allow_null=True)
-#     region = serializers.PrimaryKeyRelatedField(queryset=Region.objects.all(), required=False, allow_null=True)
-#     centre = serializers.PrimaryKeyRelatedField(queryset=Centre.objects.all(), required=False, allow_null=True)
-
-#     class Meta:
-#         model = User
-#         fields = ["username", "email", "password", "first_name", "last_name", "role", "region", "centre"]
-
-#     def create(self, validated_data):
-#         password = validated_data.pop("password")
-#         user = User(**validated_data)
-#         user.set_password(password)
-#         user.save()
-#         return user
-# # ------------------ REGION / CENTRE / ROLE ------------------
-# class RegionSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Region
-#         fields = "__all__"
-
-# class CentreSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Centre
-#         fields = "__all__"
-
-# class RoleSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Role
-#         fields = "__all__"
-
-
-# serializers.py — COMPLET
-# serializers.py — fichier COMPLET
 
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -217,3 +181,27 @@ class ApprenantResultSerializer(serializers.Serializer):
     apprenant = serializers.CharField()
     total_points = serializers.IntegerField()
     percentage = serializers.FloatField()
+
+
+
+
+
+
+
+
+
+
+
+
+
+#Inscription Candidat 
+from rest_framework import serializers
+from .models import Candidat
+
+
+class CandidatSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Candidat
+        fields = "__all__"
+        read_only_fields = ["statut_fiche", "identifiant_unique"]

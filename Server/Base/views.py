@@ -812,3 +812,25 @@ class EvaluationSessionViewSet(ModelViewSet):
         doc.build(el)
         buf.seek(0)
         return HttpResponse(buf, content_type="application/pdf")
+
+
+
+
+
+
+
+#Inscription candidat View
+from rest_framework import viewsets, permissions
+from .models import Candidat
+from .serializers import CandidatSerializer
+
+
+class CandidatViewSet(viewsets.ModelViewSet):
+
+    queryset = Candidat.objects.all().order_by("-created_at")
+    serializer_class = CandidatSerializer
+    # permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [AllowAny]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)

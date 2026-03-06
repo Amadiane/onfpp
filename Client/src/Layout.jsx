@@ -26,7 +26,7 @@ const C = {
 const adminPaths = [
   "/newsPost", "/listeContacts", "/listeRejoindre",
   "/listePostulantsCommunity", "/listPartners",
-  "/listeAbonnement", "/platformPost", "/valeurPost",
+  "/listeAbonnement", "/valeurPost",
   "/dashboardAdmin", "/teamMessage", "/missionPost",
   "/activitiesPost", "/homePost", "/partnerPost",
   "/servicePost", "/portfolioPost", "/addUser",

@@ -78,7 +78,7 @@ const buildNavCategories = (role, counts = {}) => {
       { path:"/listeCandidats", label:"Inscrits & candidats",  icon:UserCheck,     roles:["DG","CD","DR","CC"], count:counts.community },
       { path:"/validation",     label:"Validation dossiers",   icon:CheckCircle2,  roles:["DG","CD","DR","CC"] },
       { path:"/suivi",          label:"Suivi pédagogique",     icon:ClipboardList, roles:["DG","CD","DR","CC","FORMATEUR"] },
-      // { path:"/suivi",          label:"Insertion",             icon:ClipboardList, roles:["DG","CD","DR","CC","FORMATEUR"] },
+      { path:"/suivi",          label:"Insertion",             icon:ClipboardList, roles:["DG","CD","DR","CC","FORMATEUR"] },
     ]},
     { title:"Présences & Notes", color:C.success, icon:ClipboardList, roles:["CC","FORMATEUR"], items:[
       { path:"/presences",   label:"Feuilles de présence",  icon:CalendarDays,  roles:["CC","FORMATEUR"] },
@@ -91,7 +91,7 @@ const buildNavCategories = (role, counts = {}) => {
       { path:"/resultats",         label:"Résultats finaux",        icon:CheckCircle2, roles:["DG","CD","DR"] },
       { path:"/attestations",      label:"Attestations PDF",        icon:FileText,     roles:["DG","CD","DR"] },
       { path:"/enquete-insertion", label:"Enquête insertion 3 mois",icon:Clock,        roles:["DG","CD","DR"] },
-      // { path:"/relances",          label:"Relances automatiques",   icon:Bell,         roles:["DG","CD"] },
+      { path:"/relances",          label:"Relances automatiques",   icon:Bell,         roles:["DG","CD"] },
     ]},
     { title:"Fin de session", color:C.accent, icon:CheckCircle2, roles:["CC","FORMATEUR"], items:[
       { path:"/resultats",         label:"Résultats finaux",        icon:CheckCircle2, roles:["CC","FORMATEUR"] },
@@ -102,13 +102,13 @@ const buildNavCategories = (role, counts = {}) => {
       { path:"/entreprises",   label:"Base des entreprises", icon:Briefcase, roles:["DG","CD","DR"] },
       { path:"/offres-emploi", label:"Offres d'emploi",      icon:Package,   roles:["DG","CD","DR"] },
     ]},
-    // { title:"Rapports", color:C.purple, icon:BarChart3, roles:["DG","CD","DR","CC"], items:[
-    //   { path:"/statistiques",      label:"Statistiques globales",   icon:PieChart,  roles:["DG","CD"] },
-    //   { path:"/statistiques",      label:"Statistiques régionales", icon:PieChart,  roles:["DR"] },
-    //   { path:"/statistiques",      label:"Statistiques du centre",  icon:BarChart3, roles:["CC"] },
-    //   { path:"/dashboardRegional", label:"Tableau régional",        icon:MapPin,    roles:["DG","CD","DR"] },
-    //   { path:"/rapports",          label:"Rapports & exports",      icon:FileText,  roles:["DG","CD","DR","CC"] },
-    // ]},
+    { title:"Rapports", color:C.purple, icon:BarChart3, roles:["DG","CD","DR","CC"], items:[
+      { path:"/statistiques",      label:"Statistiques globales",   icon:PieChart,  roles:["DG","CD"] },
+      { path:"/statistiques",      label:"Statistiques régionales", icon:PieChart,  roles:["DR"] },
+      { path:"/statistiques",      label:"Statistiques du centre",  icon:BarChart3, roles:["CC"] },
+      { path:"/dashboardRegional", label:"Tableau régional",        icon:MapPin,    roles:["DG","CD","DR"] },
+      { path:"/rapports",          label:"Rapports & exports",      icon:FileText,  roles:["DG","CD","DR","CC"] },
+    ]},
     { title:"Centres & Équipes", color:C.purple, icon:Building2, roles:["DG","CD","DR"], items:[
       { path:"/centresFormation", label:"Centres de formation", icon:Building2, roles:["DG","CD","DR"] },
       { path:"/teamMessage",      label:"Équipe & formateurs",  icon:Users,     roles:["DG","CD","DR","CC"] },
@@ -421,15 +421,15 @@ const NavAdmin = () => {
         transition:"height .28s cubic-bezier(.22,1,.36,1), box-shadow .28s, border-color .28s",
       }}>
 
-        {/* ── Barre accent tricolore Guinée ── */}
+        {/* ── Barre tricolore Guinée : Rouge · Jaune · Vert ── */}
         <div style={{
           position:"absolute", top:0, left:0, right:0, height:3,
           display:"flex", pointerEvents:"none",
           opacity: scrolled ? 1 : 0.75,
           transition:"opacity .3s",
         }}>
+          <div style={{ flex:1, background:"#E02020" }}/>
           <div style={{ flex:1, background:C.accent }}/>
-          <div style={{ flex:2, background:C.navy }}/>
           <div style={{ flex:1, background:C.success }}/>
         </div>
 
@@ -904,8 +904,8 @@ const NavAdmin = () => {
             }}>
               {/* Filet tricolore bas */}
               <div style={{ position:"absolute", bottom:0, left:0, right:0, height:2, display:"flex" }}>
+                <div style={{ flex:1, background:"#E02020" }}/>
                 <div style={{ flex:1, background:C.accent }}/>
-                <div style={{ flex:2, background:C.blue }}/>
                 <div style={{ flex:1, background:C.success }}/>
               </div>
 
