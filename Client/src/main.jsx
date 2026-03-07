@@ -55,7 +55,7 @@ import ThonProduct from './components/HeaderSection/ThonProduct.jsx';
 
 // Admin posts
 import TeamMessage from './components/Admin/TeamPost.jsx';
-import MissionPost from './components/Admin/MissionPost.jsx';
+import Formation from './components/Admin/Formation.jsx';
 import ListeRejoindre from './components/Admin/ListeRejoindre.jsx';
 import ListeContacts from './components/Admin/ListeContacts.jsx';
 import ListePostulantsCommunity from './components/Admin/ListeCommunity.jsx';
@@ -124,7 +124,7 @@ const router = createBrowserRouter(
       <Route element={<PrivateRoute />}>
         <Route path="dashboardAdmin" element={<DashboardAdmin />} />
         <Route path="teamMessage" element={<TeamMessage />} />
-        <Route path="missionPost" element={<MissionPost />} />
+        <Route path="formation" element={<Formation />} />
         <Route path="listeRejoindre" element={<ListeRejoindre />} />
         <Route path="listeContacts" element={<ListeContacts />} />
         <Route path="listePostulantsCommunity" element={<ListePostulantsCommunity />} />

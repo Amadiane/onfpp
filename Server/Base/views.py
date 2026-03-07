@@ -851,89 +851,369 @@ class EvaluationSessionViewSet(ModelViewSet):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #Inscription candidat View
 # views.py  (section Candidat)
+# views.py
+# views.py
+import traceback
+import logging
 
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Q
+from rest_framework.exceptions import ValidationError
+from django.db.models import Q, Count
 
-from .models import Candidat
-from .serializers import CandidatSerializer
+from .models import Candidat, Formation
+from .serializers import (
+    CandidatSerializer,
+    CandidatLightSerializer,
+    FormationSerializer,
+)
+
+logger = logging.getLogger(__name__)
 
 
-class CandidatViewSet(viewsets.ModelViewSet):
+# ══════════════════════════════════════════════════════════════════
+#  VIEWSET FORMATION
+# ══════════════════════════════════════════════════════════════════
+
+class FormationViewSet(viewsets.ModelViewSet):
     """
-    CRUD complet pour les candidats.
+    CRUD complet pour les formations ONFPP.
+
     Endpoints générés automatiquement :
-      GET    /api/candidats/          → liste
-      POST   /api/candidats/          → créer
-      GET    /api/candidats/{id}/     → détail
-      PUT    /api/candidats/{id}/     → modifier (tous les champs)
-      PATCH  /api/candidats/{id}/     → modifier (champs partiels)
-      DELETE /api/candidats/{id}/     → supprimer
-    Endpoint custom :
-      PATCH  /api/candidats/{id}/valider/  → valider la fiche
-      PATCH  /api/candidats/{id}/rejeter/  → rejeter la fiche
+      GET    /api/formations/                  → liste (+ filtres)
+      POST   /api/formations/                  → créer
+      GET    /api/formations/{id}/             → détail
+      PUT    /api/formations/{id}/             → modifier (tous champs)
+      PATCH  /api/formations/{id}/             → modifier (partiel)
+      DELETE /api/formations/{id}/             → supprimer
+
+    Endpoints custom :
+      GET    /api/formations/{id}/candidats/   → apprenants de la session
+      GET    /api/formations/stats/            → statistiques globales
+
+    Filtres (query params) :
+      ?search=<texte>       → nom, organisme, formateur
+      ?antenne=conakry      → par antenne
+      ?type=continue        → continue | apprentissage
+      ?division=DAP         → DAP | DFC
     """
 
-    queryset           = Candidat.objects.all().order_by("-created_at")
-    serializer_class   = CandidatSerializer
+    queryset           = Formation.objects.all().order_by("-created_at")
+    serializer_class   = FormationSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    # ── Recherche & filtrage ───────────────────────────────
     def get_queryset(self):
-        qs = Candidat.objects.all().order_by("-created_at")
+        qs = Formation.objects.annotate(
+            _nb_candidats=Count("candidats")
+        ).order_by("-created_at")
 
-        # Recherche textuelle ?search=
         search = self.request.query_params.get("search", "").strip()
         if search:
             qs = qs.filter(
-                Q(nom__icontains=search)          |
-                Q(prenom__icontains=search)       |
-                Q(email__icontains=search)        |
-                Q(telephone__icontains=search)    |
-                Q(metier_souhaite__icontains=search)
+                Q(nom_formation__icontains=search)       |
+                Q(organisme_formation__icontains=search) |
+                Q(nom_formateur__icontains=search)
             )
 
-        # Filtre statut ?statut=en_attente|valide|rejete
+        antenne = self.request.query_params.get("antenne", "").strip()
+        if antenne:
+            qs = qs.filter(antenne=antenne)
+
+        type_f = self.request.query_params.get("type", "").strip()
+        if type_f in ("continue", "apprentissage"):
+            qs = qs.filter(type_formation=type_f)
+
+        division = self.request.query_params.get("division", "").strip().upper()
+        if division == "DAP":
+            qs = qs.filter(type_formation="apprentissage")
+        elif division == "DFC":
+            qs = qs.filter(type_formation="continue")
+
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=["get"], url_path="candidats")
+    def candidats(self, request, pk=None):
+        """
+        Retourne la liste des candidats rattachés à cette formation.
+        GET /api/formations/{id}/candidats/
+
+        Filtres : ?statut=en_attente|valide|rejete
+        """
+        formation = self.get_object()
+        qs = formation.candidats.all().order_by("-created_at")
+
+        statut = request.query_params.get("statut", "").strip()
+        if statut in ("en_attente", "valide", "rejete"):
+            qs = qs.filter(statut_fiche=statut)
+
+        serializer = CandidatLightSerializer(qs, many=True)
+        return Response({
+            "formation_id":          formation.id,
+            "nom_formation":         formation.nom_formation,
+            "identifiant_formation": formation.identifiant_formation,
+            "division":              formation.division,
+            "antenne":               formation.get_antenne_display(),
+            "nb_candidats":          qs.count(),
+            "candidats":             serializer.data,
+        })
+
+    @action(detail=False, methods=["get"], url_path="stats")
+    def stats(self, request):
+        """Statistiques globales sur les formations."""
+        qs = Formation.objects.all()
+        return Response({
+            "total":             qs.count(),
+            "dap":               qs.filter(type_formation="apprentissage").count(),
+            "dfc":               qs.filter(type_formation="continue").count(),
+            "total_apprenants":  Candidat.objects.filter(formation__isnull=False).count(),
+            "par_antenne": list(
+                qs.values("antenne")
+                .annotate(nb=Count("id"))
+                .order_by("-nb")
+            ),
+            "par_division": [
+                {"division": "DAP", "nb": qs.filter(type_formation="apprentissage").count()},
+                {"division": "DFC", "nb": qs.filter(type_formation="continue").count()},
+            ],
+        })
+
+
+# ══════════════════════════════════════════════════════════════════
+#  VIEWSET CANDIDAT
+# ══════════════════════════════════════════════════════════════════
+
+class CandidatViewSet(viewsets.ModelViewSet):
+    """
+    CRUD complet pour les candidats / apprenants ONFPP.
+
+    Endpoints générés automatiquement :
+      GET    /api/candidats/               → liste (+ filtres)
+      POST   /api/candidats/               → créer (+ formation_data imbriqué)
+      GET    /api/candidats/{id}/          → détail
+      PUT    /api/candidats/{id}/          → modifier
+      PATCH  /api/candidats/{id}/          → modifier partiel
+      DELETE /api/candidats/{id}/          → supprimer
+
+    Endpoints custom :
+      PATCH  /api/candidats/{id}/valider/  → valider + génère identifiant_unique
+      PATCH  /api/candidats/{id}/rejeter/  → rejeter la fiche
+      GET    /api/candidats/stats/         → statistiques globales
+
+    Filtres (query params) :
+      ?search=<texte>       nom, prénom, email, téléphone, identifiant, formation, conseiller
+      ?statut=en_attente    en_attente | valide | rejete
+      ?antenne=conakry      code antenne (conakry, kankan…)
+      ?formation=<id>       id de la Formation liée
+      ?situation=chomeur    filtre par situation
+      ?domaine=informatique filtre par domaine
+      ?sexe=H               H | F
+    """
+
+    queryset = (
+        Candidat.objects
+        .select_related("formation", "created_by")
+        .order_by("-created_at")
+    )
+    serializer_class   = CandidatSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = (
+            Candidat.objects
+            .select_related("formation", "created_by")
+            .order_by("-created_at")
+        )
+
+        search = self.request.query_params.get("search", "").strip()
+        if search:
+            qs = qs.filter(
+                Q(nom__icontains=search)                       |
+                Q(prenom__icontains=search)                    |
+                Q(email__icontains=search)                     |
+                Q(telephone__icontains=search)                 |
+                Q(identifiant_unique__icontains=search)        |
+                Q(formation__nom_formation__icontains=search)  |
+                Q(conseiller__icontains=search)                |
+                Q(formation_ciblee__icontains=search)          |
+                Q(domaine__icontains=search)
+            )
+
         statut = self.request.query_params.get("statut", "").strip()
         if statut in ("en_attente", "valide", "rejete"):
             qs = qs.filter(statut_fiche=statut)
 
-        # Filtre antenne ?antenne=<id>
-        antenne_id = self.request.query_params.get("antenne", "").strip()
-        if antenne_id.isdigit():
-            qs = qs.filter(antenne_id=int(antenne_id))
+        # Filtre antenne (CharField)
+        antenne = self.request.query_params.get("antenne", "").strip()
+        if antenne:
+            qs = qs.filter(antenne=antenne)
+
+        formation_id = self.request.query_params.get("formation", "").strip()
+        if formation_id.isdigit():
+            qs = qs.filter(formation_id=int(formation_id))
+
+        situation = self.request.query_params.get("situation", "").strip()
+        if situation:
+            qs = qs.filter(situation=situation)
+
+        domaine = self.request.query_params.get("domaine", "").strip()
+        if domaine:
+            qs = qs.filter(domaine=domaine)
+
+        sexe = self.request.query_params.get("sexe", "").strip()
+        if sexe in ("H", "F"):
+            qs = qs.filter(sexe=sexe)
 
         return qs
 
-    # ── Création : on associe l'utilisateur courant ────────
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
-    # ── Action custom : valider une fiche ─────────────────
+    def create(self, request, *args, **kwargs):
+        """Override temporaire pour exposer l'erreur exacte au lieu du 500 HTML."""
+        try:
+            return super().create(request, *args, **kwargs)
+        except Exception as e:
+            tb = traceback.format_exc()
+            logger.error("=== ERREUR POST /api/candidats/ ===\n%s", tb)
+            return Response(
+                {
+                    "error":     str(e),
+                    "type":      type(e).__name__,
+                    "traceback": tb.splitlines(),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    # ── Valider une fiche ─────────────────────────────────────────
+
     @action(detail=True, methods=["patch"], url_path="valider")
     def valider(self, request, pk=None):
+        """
+        Valide la fiche et génère l'identifiant unique si absent.
+        PATCH /api/candidats/{id}/valider/
+        """
         candidat = self.get_object()
+
         if candidat.statut_fiche == "valide":
             return Response(
                 {"detail": "Ce candidat est déjà validé."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
         candidat.statut_fiche = "valide"
-        # Génère un identifiant unique si non encore attribué
         if not candidat.identifiant_unique:
-            import uuid
-            candidat.identifiant_unique = f"ONFPP-{uuid.uuid4().hex[:8].upper()}"
+            candidat.identifiant_unique = candidat.generate_identifiant()
         candidat.save()
+
         return Response(CandidatSerializer(candidat).data)
 
-    # ── Action custom : rejeter une fiche ─────────────────
+    # ── Rejeter une fiche ─────────────────────────────────────────
+
     @action(detail=True, methods=["patch"], url_path="rejeter")
     def rejeter(self, request, pk=None):
+        """
+        Rejette la fiche du candidat.
+        PATCH /api/candidats/{id}/rejeter/
+        """
         candidat = self.get_object()
+
+        if candidat.statut_fiche == "rejete":
+            return Response(
+                {"detail": "Ce candidat est déjà rejeté."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         candidat.statut_fiche = "rejete"
         candidat.save()
+
         return Response(CandidatSerializer(candidat).data)
+
+    # ── Statistiques globales ─────────────────────────────────────
+
+    @action(detail=False, methods=["get"], url_path="stats")
+    def stats(self, request):
+        """Statistiques globales sur les candidats."""
+        qs = Candidat.objects.all()
+        return Response({
+            "total":      qs.count(),
+            "en_attente": qs.filter(statut_fiche="en_attente").count(),
+            "valide":     qs.filter(statut_fiche="valide").count(),
+            "rejete":     qs.filter(statut_fiche="rejete").count(),
+            "par_situation": list(
+                qs.exclude(situation__isnull=True)
+                .values("situation")
+                .annotate(nb=Count("id"))
+                .order_by("-nb")
+            ),
+            "par_domaine": list(
+                qs.exclude(domaine__isnull=True)
+                .values("domaine")
+                .annotate(nb=Count("id"))
+                .order_by("-nb")
+            ),
+            "par_antenne": list(
+                qs.exclude(antenne__isnull=True)
+                .values("antenne")
+                .annotate(nb=Count("id"))
+                .order_by("-nb")
+            ),
+            "par_sexe": list(
+                qs.exclude(sexe__isnull=True)
+                .values("sexe")
+                .annotate(nb=Count("id"))
+            ),
+            "par_niveau_etude": list(
+                qs.exclude(niveau_etude__isnull=True)
+                .values("niveau_etude")
+                .annotate(nb=Count("id"))
+                .order_by("-nb")
+            ),
+        })
