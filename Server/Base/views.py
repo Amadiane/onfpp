@@ -1506,3 +1506,109 @@ class ModulePlanFormationViewSet(viewsets.ModelViewSet):
             module.date_realisation = request.data["date_realisation"]
         module.save()
         return Response(ModulePlanFormationSerializer(module).data)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 3. VIEWS.PY — Ajouter FormateurViewSet
+# ══════════════════════════════════════════════════════════════════════
+
+from rest_framework import viewsets, permissions, filters
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django.db.models import Avg, Count, Q
+from .models import Formateur
+from .serializers import FormateurSerializer
+
+
+class FormateurViewSet(viewsets.ModelViewSet):
+    serializer_class   = FormateurSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends    = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields      = ["nom", "prenom", "telephone", "email",
+                          "nom_cabinet", "specialite", "domaine_autre", "domaine"]
+    ordering_fields    = ["nom", "prenom", "note_evaluation", "note_manuelle",
+                          "created_at", "disponible"]
+    ordering           = ["nom", "prenom"]
+
+    def get_queryset(self):
+        qs = Formateur.objects.all()
+
+        # Filtres query params
+        domaine  = self.request.query_params.get("domaine")
+        type_    = self.request.query_params.get("type")
+        antenne  = self.request.query_params.get("antenne")
+        disponible = self.request.query_params.get("disponible")
+
+        if domaine:    qs = qs.filter(domaine=domaine)
+        if type_:      qs = qs.filter(type=type_)
+        if antenne:    qs = qs.filter(antenne=antenne)
+        if disponible is not None:
+            qs = qs.filter(disponible=disponible.lower() in ["true","1","oui"])
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    # ── Statistiques globales ──────────────────────────────────────────
+    @action(detail=False, methods=["get"], url_path="stats")
+    def stats(self, request):
+        qs = Formateur.objects.all()
+        return Response({
+            "total":       qs.count(),
+            "disponibles": qs.filter(disponible=True).count(),
+            "organismes":  qs.filter(type="organisme").count(),
+            "individuels": qs.filter(type="individuel").count(),
+            "evalues":     qs.filter(
+                Q(note_evaluation__isnull=False) | Q(note_manuelle__isnull=False)
+            ).count(),
+            "note_moyenne": qs.aggregate(
+                moy=Avg("note_evaluation")
+            )["moy"],
+            "par_domaine": list(
+                qs.values("domaine").annotate(nb=Count("id")).order_by("-nb")
+            ),
+            "par_antenne": list(
+                qs.values("antenne").annotate(nb=Count("id")).order_by("-nb")
+            ),
+        })
+
+    # ── Mettre à jour la note manuelle uniquement ──────────────────────
+    @action(detail=True, methods=["patch"], url_path="noter")
+    def noter(self, request, pk=None):
+        formateur = self.get_object()
+        note = request.data.get("note_manuelle")
+        if note is None:
+            return Response({"error": "note_manuelle requis"}, status=400)
+        try:
+            note = float(note)
+            if not (0 <= note <= 5):
+                raise ValueError
+        except (ValueError, TypeError):
+            return Response({"error": "Note invalide (0-5)"}, status=400)
+        formateur.note_manuelle = note
+        formateur.save(update_fields=["note_manuelle"])
+        return Response(FormateurSerializer(formateur, context={"request": request}).data)
+
+    # ── Basculer disponibilité ──────────────────────────────────────────
+    @action(detail=True, methods=["patch"], url_path="toggle-disponibilite")
+    def toggle_disponibilite(self, request, pk=None):
+        formateur = self.get_object()
+        formateur.disponible = not formateur.disponible
+        formateur.save(update_fields=["disponible"])
+        return Response({"disponible": formateur.disponible})

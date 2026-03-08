@@ -143,3 +143,22 @@ class CandidatAdmin(admin.ModelAdmin):
             return format_html('<span style="color:gray">✗ Non</span>')
         return "—"
     insere_display.short_description = "Inséré"
+
+
+
+
+
+
+
+
+from django.contrib import admin
+from .models import Formateur
+
+@admin.register(Formateur)
+class FormateurAdmin(admin.ModelAdmin):
+    list_display  = ["identifiant_unique", "prenom", "nom", "type", "domaine",
+                     "antenne", "disponible", "note_evaluation", "note_manuelle"]
+    list_filter   = ["type", "domaine", "antenne", "disponible"]
+    search_fields = ["nom", "prenom", "telephone", "email", "nom_cabinet"]
+    ordering      = ["nom", "prenom"]
+    readonly_fields = ["identifiant_unique", "note_evaluation", "nb_evaluations", "created_at", "updated_at"]

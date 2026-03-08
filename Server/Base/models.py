@@ -804,3 +804,147 @@ class ModulePlanFormation(models.Model):
 
     def __str__(self):
         return f"{self.entreprise_formation.nom_entreprise} — Module: {self.intitule_module}"
+
+
+
+
+
+
+
+
+
+
+from django.db import models
+from django.conf import settings
+from django.core.validators import MinValueValidator, MaxValueValidator
+
+
+class Formateur(models.Model):
+
+    # ── Type ──────────────────────────────────────────────────────────
+    TYPE_CHOICES = [
+        ("individuel", "Formateur individuel"),
+        ("organisme",  "Organisme / Cabinet de formation"),
+    ]
+
+    # ── Domaines — en miroir du frontend ──────────────────────────────
+    DOMAINE_CHOICES = [
+        ("btp",         "BTP — Bâtiment & Travaux Publics"),
+        ("agriculture", "Agriculture & Élevage"),
+        ("numerique",   "Numérique & Technologies"),
+        ("sante",       "Santé & Social"),
+        ("commerce",    "Commerce & Gestion"),
+        ("artisanat",   "Artisanat & Textile"),
+        ("tourisme",    "Tourisme & Hôtellerie"),
+        ("autres",      "Autre domaine"),
+    ]
+
+    # ── Antennes ──────────────────────────────────────────────────────
+    ANTENNE_CHOICES = [
+        ("conakry",    "Conakry"),
+        ("forecariah", "Forecariah"),
+        ("boke",       "Boké"),
+        ("kindia",     "Kindia"),
+        ("labe",       "Labé"),
+        ("mamou",      "Mamou"),
+        ("faranah",    "Faranah"),
+        ("kankan",     "Kankan"),
+        ("siguiri",    "Siguiri"),
+        ("nzerekore",  "N'Zérékoré"),
+    ]
+
+    # ── Identité ──────────────────────────────────────────────────────
+    identifiant_unique  = models.CharField(max_length=30, unique=True, blank=True)
+    nom                 = models.CharField(max_length=150)
+    prenom              = models.CharField(max_length=150)
+    photo               = models.ImageField(upload_to="formateurs/photos/", blank=True, null=True)
+
+    # ── Contact ───────────────────────────────────────────────────────
+    telephone           = models.CharField(max_length=30)
+    email               = models.EmailField(blank=True, null=True)
+    adresse             = models.CharField(max_length=250, blank=True, null=True)
+    antenne             = models.CharField(max_length=20, choices=ANTENNE_CHOICES, blank=True, null=True)
+
+    # ── Type individuel / organisme ───────────────────────────────────
+    type                = models.CharField(max_length=15, choices=TYPE_CHOICES, default="individuel")
+    nom_cabinet         = models.CharField(max_length=200, blank=True, null=True,
+                            help_text="Nom du cabinet si organisme")
+    site_web            = models.URLField(blank=True, null=True)
+
+    # ── Domaine & Spécialité ──────────────────────────────────────────
+    domaine             = models.CharField(max_length=20, choices=DOMAINE_CHOICES, blank=True, null=True)
+    specialite          = models.CharField(max_length=150, blank=True, null=True,
+                            help_text="Métier choisi dans la liste du domaine")
+    domaine_autre       = models.CharField(max_length=150, blank=True, null=True,
+                            help_text="Saisie libre si domaine = 'autres'")
+
+    # ── Compétences ───────────────────────────────────────────────────
+    experience_annees   = models.PositiveSmallIntegerField(blank=True, null=True)
+    diplome             = models.CharField(max_length=200, blank=True, null=True)
+    certifications      = models.CharField(max_length=300, blank=True, null=True)
+    langues             = models.CharField(max_length=150, blank=True, null=True)
+    bio                 = models.TextField(blank=True, null=True)
+
+    # ── Disponibilité ─────────────────────────────────────────────────
+    disponible          = models.BooleanField(default=True)
+
+    # ── Évaluation ────────────────────────────────────────────────────
+    # note_evaluation   → calculée automatiquement depuis SuiviEvaluation (via signal ou méthode)
+    # note_manuelle     → saisie par l'administration
+    note_manuelle       = models.FloatField(
+                            blank=True, null=True,
+                            validators=[MinValueValidator(0), MaxValueValidator(5)],
+                            help_text="Note 0-5 saisie manuellement")
+    note_evaluation     = models.FloatField(
+                            blank=True, null=True,
+                            validators=[MinValueValidator(0), MaxValueValidator(5)],
+                            help_text="Moyenne calculée depuis les évaluations de sessions")
+    nb_evaluations      = models.PositiveIntegerField(default=0,
+                            help_text="Nombre d'évaluations de sessions ayant alimenté note_evaluation")
+    detail_evaluation   = models.JSONField(blank=True, null=True,
+                            help_text="Détail note par critère {critere: moyenne}")
+
+    # ── Méta ──────────────────────────────────────────────────────────
+    created_by          = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                            null=True, blank=True, related_name="formateurs_crees")
+    created_at          = models.DateTimeField(auto_now_add=True)
+    updated_at          = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["nom", "prenom"]
+        verbose_name = "Formateur"
+        verbose_name_plural = "Formateurs"
+
+    def __str__(self):
+        return f"{self.prenom} {self.nom}"
+
+    # ── Génération identifiant ─────────────────────────────────────────
+    def generate_identifiant(self):
+        from datetime import date
+        ANTENNE_CODES = {
+            "conakry":"CKY","forecariah":"FRC","boke":"BOK","kindia":"KND",
+            "labe":"LBE","mamou":"MMU","faranah":"FRN","kankan":"KNK",
+            "siguiri":"SGR","nzerekore":"NZR",
+        }
+        div  = "ORG" if self.type == "organisme" else "IND"
+        ant  = ANTENNE_CODES.get(self.antenne, "GN")
+        year = date.today().year
+        last = Formateur.objects.filter(
+            identifiant_unique__startswith=f"FORM-{div}-{ant}-{year}"
+        ).count()
+        return f"FORM-{div}-{ant}-{year}-{str(last + 1).zfill(4)}"
+
+    def save(self, *args, **kwargs):
+        if not self.identifiant_unique:
+            self.identifiant_unique = self.generate_identifiant()
+        super().save(*args, **kwargs)
+
+    # ── Note finale (pour le serializer) ──────────────────────────────
+    @property
+    def note_finale(self):
+        """Retourne note_evaluation si disponible, sinon note_manuelle."""
+        if self.note_evaluation is not None:
+            return round(self.note_evaluation, 1)
+        if self.note_manuelle is not None:
+            return round(self.note_manuelle, 1)
+        return None

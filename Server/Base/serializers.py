@@ -746,3 +746,99 @@ class EntrepriseFormationLightSerializer(serializers.ModelSerializer):
 
     def get_nb_formes_total(self, obj):
         return obj.nb_formes_hommes + obj.nb_formes_femmes
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+from rest_framework import serializers
+# from .models import Formateur   # déjà importé dans votre fichier
+
+
+class FormateurSerializer(serializers.ModelSerializer):
+
+    # Champs calculés en lecture seule
+    antenne_display  = serializers.SerializerMethodField(read_only=True)
+    type_display     = serializers.SerializerMethodField(read_only=True)
+    domaine_display  = serializers.SerializerMethodField(read_only=True)
+    note_finale = serializers.FloatField(read_only=True)
+    created_by_nom   = serializers.SerializerMethodField(read_only=True)
+    photo_url        = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model  = Formateur
+        fields = [
+            "id", "identifiant_unique",
+            # Identité
+            "nom", "prenom", "photo", "photo_url",
+            # Contact
+            "telephone", "email", "adresse", "antenne", "antenne_display",
+            # Type
+            "type", "type_display", "nom_cabinet", "site_web",
+            # Domaine
+            "domaine", "domaine_display", "specialite", "domaine_autre",
+            # Compétences
+            "experience_annees", "diplome", "certifications", "langues", "bio",
+            # Disponibilité
+            "disponible",
+            # Évaluation
+            "note_manuelle", "note_evaluation", "nb_evaluations",
+            "detail_evaluation", "note_finale",
+            # Méta
+            "created_by", "created_by_nom", "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "id", "identifiant_unique", "note_evaluation",
+            "nb_evaluations", "detail_evaluation",
+            "created_by", "created_by_nom", "created_at", "updated_at",
+        ]
+
+    def get_antenne_display(self, obj):
+        return obj.get_antenne_display() if obj.antenne else None
+
+    def get_type_display(self, obj):
+        return obj.get_type_display()
+
+    def get_domaine_display(self, obj):
+        return obj.get_domaine_display() if obj.domaine else None
+
+    def get_created_by_nom(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+
+    def get_photo_url(self, obj):
+        if obj.photo:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(obj.photo.url)
+            return obj.photo.url
+        return None
+
+    def validate(self, attrs):
+        # Si type=organisme, nom_cabinet obligatoire
+        if attrs.get("type") == "organisme" and not attrs.get("nom_cabinet", "").strip():
+            raise serializers.ValidationError({"nom_cabinet": "Obligatoire pour un organisme."})
+        # Si domaine=autres, domaine_autre obligatoire
+        if attrs.get("domaine") == "autres" and not attrs.get("domaine_autre", "").strip():
+            raise serializers.ValidationError({"domaine_autre": "Précisez le domaine."})
+        # note_manuelle dans [0,5]
+        note = attrs.get("note_manuelle")
+        if note is not None and not (0 <= note <= 5):
+            raise serializers.ValidationError({"note_manuelle": "La note doit être entre 0 et 5."})
+        return attrs

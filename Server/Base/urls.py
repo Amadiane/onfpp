@@ -1,7 +1,7 @@
 # urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import CustomLoginView, UserCreateView, MeView, RoleViewSet, RegionViewSet, CentreViewSet, UserListView, CandidatViewSet, FormationViewSet, EntrepriseFormationViewSet, ModulePlanFormationViewSet
+from .views import CustomLoginView, UserCreateView, MeView, RoleViewSet, RegionViewSet, CentreViewSet, UserListView, CandidatViewSet, FormationViewSet, EntrepriseFormationViewSet, ModulePlanFormationViewSet, FormateurViewSet
 from .views import (
     EvaluationSessionViewSet,
     CritereViewSet,
@@ -23,6 +23,7 @@ router.register(r"formations",  FormationViewSet, basename="formation")
 router.register(r"candidats",   CandidatViewSet,  basename="candidat")
 router.register(r"entreprise-formations", EntrepriseFormationViewSet, basename="entreprise-formation")
 router.register(r"modules-formation",     ModulePlanFormationViewSet, basename="module-formation")
+router.register(r"formateurs", FormateurViewSet, basename="formateur")
 
 
 
