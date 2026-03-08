@@ -78,6 +78,7 @@ import ServicePost from './components/Admin/ServicePost.jsx';
 import ThonProductPost from './components/Admin/ThonProductPost.jsx';
 import AddUser from './components/Admin/AddUser.jsx';
 import SuiviEvaluation from './components/Admin/SuiviEvaluation.jsx';
+import FormationDFC from './components/Admin/Formationdfc.jsx';
 
 
 // ✅ Router
@@ -147,6 +148,7 @@ const router = createBrowserRouter(
         <Route path="thonProductPost" element={<ThonProductPost />} />
         <Route path="addUser" element={<AddUser />} />
         <Route path="suiviEvaluation" element={<SuiviEvaluation />} />
+        <Route path="formationDFC" element={<FormationDFC />} />
       </Route>
 
     </Route>
