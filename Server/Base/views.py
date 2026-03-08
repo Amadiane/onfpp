@@ -1612,3 +1612,433 @@ class FormateurViewSet(viewsets.ModelViewSet):
         formateur.disponible = not formateur.disponible
         formateur.save(update_fields=["disponible"])
         return Response({"disponible": formateur.disponible})
+    
+    
+
+    # Dans FormateurViewSet, ajouter cette action :
+
+    @action(detail=True, methods=["get"], url_path="evaluations")
+    def evaluations(self, request, pk=None):
+        """
+        GET /api/formateurs/{id}/evaluations/
+        Retourne toutes les sessions d'évaluation liées à ce formateur
+        avec les résultats détaillés.
+        """
+        formateur = self.get_object()
+        
+        # Chercher les sessions où le nom du formateur correspond
+        sessions = EvaluationSession.objects.filter(
+            formateur=formateur.prenom + " " + formateur.nom
+        )
+        
+        data = []
+        for session in sessions:
+            apprenants = Apprenant.objects.filter(
+                id__in=session.evaluation_set.values_list("apprenant", flat=True).distinct()
+            )
+            nb_app = apprenants.count()
+            total_glob = sum(session.total_points_apprenant(a) for a in apprenants)
+            nb_crit = Critere.objects.count()
+            max_glob = nb_crit * 75 * nb_app
+            pct_glob = round(total_glob / max_glob * 100, 2) if max_glob else 0
+            
+            data.append({
+                "session_id":    session.id,
+                "theme":         session.theme,
+                "lieu":          session.lieu,
+                "periode_debut": session.periode_debut,
+                "periode_fin":   session.periode_fin,
+                "organisme":     session.organisme,
+                "nb_apprenants": nb_app,
+                "nb_criteres":   nb_crit,
+                "total_points":  total_glob,
+                "max_points":    max_glob,
+                "pourcentage":   pct_glob,
+                "appreciation":  (
+                    "Très satisfaisant" if pct_glob >= 75
+                    else "Satisfaisant" if pct_glob >= 50
+                    else "Insuffisant"
+                ),
+            })
+        
+        # Calculer la note globale du formateur depuis ses sessions
+        if data:
+            note_moy = round(sum(d["pourcentage"] for d in data) / len(data) / 20, 1)  # sur 5
+            # Mettre à jour note_evaluation du formateur
+            formateur.note_evaluation = note_moy
+            formateur.nb_evaluations = len(data)
+            formateur.save(update_fields=["note_evaluation", "nb_evaluations"])
+        
+        return Response({
+            "formateur_id":   formateur.id,
+            "formateur_nom":  f"{formateur.prenom} {formateur.nom}",
+            "nb_sessions":    len(data),
+            "note_calculee":  formateur.note_evaluation,
+            "sessions":       data,
+        })
+    @action(detail=True, methods=["get"], url_path="evaluations")
+    def evaluations(self, request, pk=None):
+        formateur = self.get_object()
+        sessions = EvaluationSession.objects.filter(formateur_ref=formateur)
+        # ... calculs résultats
+
+    @action(detail=True, methods=["get"], url_path="evaluations")
+    def evaluations(self, request, pk=None):
+        """
+        GET /api/formateurs/{id}/evaluations/
+        Retourne les sessions liées + résultats calculés.
+        Met à jour note_evaluation + nb_evaluations sur le formateur.
+        """
+        from .models import EvaluationSession, Apprenant, Critere, NOTE_MAPPING
+
+        formateur = self.get_object()
+        sessions  = EvaluationSession.objects.filter(
+            formateur_ref=formateur
+        ).order_by("-created_at")
+
+        sessions_data = []
+        all_pcts      = []
+
+        for session in sessions:
+            apprenants = Apprenant.objects.filter(
+                id__in=session.evaluation_set.values_list("apprenant", flat=True).distinct()
+            )
+            nb_app = apprenants.count()
+            if nb_app == 0:
+                sessions_data.append({
+                    "session_id":    session.id,
+                    "theme":         session.theme,
+                    "lieu":          session.lieu,
+                    "periode_debut": str(session.periode_debut) if session.periode_debut else None,
+                    "periode_fin":   str(session.periode_fin)   if session.periode_fin   else None,
+                    "organisme":     session.organisme,
+                    "nb_apprenants": 0,
+                    "pct_global":    0,
+                    "total_points":  0,
+                    "apprenants":    [],
+                })
+                continue
+
+            total_glob = 0
+            app_list   = []
+            for a in apprenants:
+                total   = session.total_points_apprenant(a)
+                percent = session.percentage_apprenant(a)
+                total_glob += total
+                app_list.append({
+                    "nom":     a.nom,
+                    "total":   total,
+                    "percent": percent,
+                })
+
+            nb_crit  = Critere.objects.count()
+            max_glob = nb_crit * 75 * nb_app
+            pct_glob = round(total_glob / max_glob * 100, 2) if max_glob else 0
+            all_pcts.append(pct_glob)
+
+            sessions_data.append({
+                "session_id":    session.id,
+                "theme":         session.theme,
+                "lieu":          session.lieu,
+                "periode_debut": str(session.periode_debut) if session.periode_debut else None,
+                "periode_fin":   str(session.periode_fin)   if session.periode_fin   else None,
+                "organisme":     session.organisme,
+                "nb_apprenants": nb_app,
+                "pct_global":    pct_glob,
+                "total_points":  total_glob,
+                "apprenants":    app_list,
+            })
+
+        # Note formateur : moy_pct / 20  → échelle 0-5
+        note_calculee = None
+        if all_pcts:
+            moy_pct       = sum(all_pcts) / len(all_pcts)
+            note_calculee = round(moy_pct / 20, 2)
+            formateur.note_evaluation = note_calculee
+            formateur.nb_evaluations  = len(all_pcts)
+            formateur.save(update_fields=["note_evaluation", "nb_evaluations"])
+
+        return Response({
+            "formateur_id":  formateur.id,
+            "formateur_nom": f"{formateur.prenom} {formateur.nom}",
+            "nb_sessions":   len(sessions_data),
+            "note_calculee": note_calculee,
+            "sessions":      sessions_data,
+        })
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ACTION 2 — GET /api/formateurs/{id}/pdf-profil/
+# ══════════════════════════════════════════════════════════════════════════════
+
+    @action(detail=True, methods=["get"], url_path="pdf-profil")
+    def pdf_profil(self, request, pk=None):
+        """
+        GET /api/formateurs/{id}/pdf-profil/
+        Génère et retourne un PDF complet du profil formateur.
+        Content-Disposition: attachment → téléchargement blob côté frontend.
+        """
+        import io
+        from datetime import date
+        from .models import EvaluationSession, Apprenant, Critere, NOTE_MAPPING
+        from django.http import HttpResponse
+        from reportlab.platypus import (
+            SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+        )
+        from reportlab.lib import colors as rl_colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import cm
+        from reportlab.lib.enums import TA_CENTER
+
+        # Couleurs
+        _NAVY   = rl_colors.HexColor("#0D1B5E")
+        _BLUE   = rl_colors.HexColor("#1A3BD4")
+        _ICE    = rl_colors.HexColor("#C8D9FF")
+        _GREEN  = rl_colors.HexColor("#0BA376")
+        _ORANGE = rl_colors.HexColor("#F5A800")
+        _RED    = rl_colors.HexColor("#E53935")
+        _GOLD   = rl_colors.HexColor("#D4920A")
+        _WHITE  = rl_colors.white
+        _LIGHT  = rl_colors.HexColor("#EEF2FF")
+
+        def _nc(pct):
+            if pct >= 75: return _GREEN
+            if pct >= 50: return _ORANGE
+            return _RED
+
+        def _nl(pct):
+            if pct >= 75: return "Très satisfaisant"
+            if pct >= 50: return "Satisfaisant"
+            return "Insuffisant"
+
+        def _fd(d):
+            return d.strftime("%d/%m/%Y") if d else "—"
+
+        ANTENNE_LABELS = {
+            "conakry":"Conakry","forecariah":"Forecariah","boke":"Boké","kindia":"Kindia",
+            "labe":"Labé","mamou":"Mamou","faranah":"Faranah","kankan":"Kankan",
+            "siguiri":"Siguiri","nzerekore":"N'Zérékoré",
+        }
+        DOMAINE_LABELS = {
+            "btp":"BTP — Bâtiment & Travaux Publics","agriculture":"Agriculture & Élevage",
+            "numerique":"Numérique & Technologies","sante":"Santé & Social",
+            "commerce":"Commerce & Gestion","artisanat":"Artisanat & Textile",
+            "tourisme":"Tourisme & Hôtellerie","autres":"Autre domaine",
+        }
+
+        formateur = self.get_object()
+
+        # Récupérer sessions liées
+        sessions  = EvaluationSession.objects.filter(
+            formateur_ref=formateur
+        ).order_by("-created_at")
+        sessions_data = []
+        all_pcts      = []
+
+        for session in sessions:
+            apprenants = Apprenant.objects.filter(
+                id__in=session.evaluation_set.values_list("apprenant", flat=True).distinct()
+            )
+            nb_app = apprenants.count()
+            if nb_app == 0:
+                continue
+            nb_crit  = Critere.objects.count()
+            total_g  = 0
+            for a in apprenants:
+                total_g += session.total_points_apprenant(a)
+            max_g  = nb_crit * 75 * nb_app
+            pct_g  = round(total_g / max_g * 100, 2) if max_g else 0
+            all_pcts.append(pct_g)
+            sessions_data.append({
+                "theme": session.theme, "lieu": session.lieu,
+                "periode_debut": session.periode_debut,
+                "periode_fin":   session.periode_fin,
+                "nb_apprenants": nb_app, "pct_global": pct_g,
+            })
+
+        note_calculee = round(sum(all_pcts) / len(all_pcts) / 20, 2) if all_pcts else None
+        note_display  = note_calculee or formateur.note_manuelle or 0
+
+        # Construction PDF
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buf, pagesize=A4,
+            leftMargin=1.8*cm, rightMargin=1.8*cm,
+            topMargin=2*cm, bottomMargin=2*cm,
+        )
+        st = getSampleStyleSheet()
+        el = []
+
+        s_title = ParagraphStyle("T",  parent=st["Title"],   textColor=_NAVY, fontSize=18, alignment=TA_CENTER, spaceAfter=4)
+        s_name  = ParagraphStyle("N",  parent=st["Normal"],  textColor=_BLUE, fontSize=15, fontName="Helvetica-Bold", alignment=TA_CENTER, spaceAfter=4)
+        s_meta  = ParagraphStyle("Me", parent=st["Normal"],  textColor=_NAVY, fontSize=9,  alignment=TA_CENTER, spaceAfter=10)
+        s_h2    = ParagraphStyle("H2", parent=st["Heading2"],textColor=_NAVY, fontSize=11, spaceBefore=14, spaceAfter=6)
+
+        # En-tête
+        el.append(Paragraph("FICHE FORMATEUR — ONFPP GUINÉE", s_title))
+        nom_complet = f"{formateur.prenom} {formateur.nom}"
+        el.append(Paragraph(nom_complet, s_name))
+        type_label = "Organisme / Cabinet" if formateur.type == "organisme" else "Formateur individuel"
+        ant_label  = ANTENNE_LABELS.get(formateur.antenne or "", formateur.antenne or "—")
+        el.append(Paragraph(
+            f"ID : <b>{formateur.identifiant_unique or '—'}</b>  ·  "
+            f"Type : <b>{type_label}</b>  ·  "
+            f"Antenne : <b>{ant_label}</b>",
+            s_meta,
+        ))
+        el.append(HRFlowable(width="100%", thickness=3, color=_NAVY))
+        el.append(Spacer(1, 0.4*cm))
+
+        # Résumé note
+        stars_str = ("★" * int(round(note_display))) + ("☆" * (5 - int(round(note_display))))
+        rt_note = Table([[
+            "Note globale",
+            f"{note_display:.1f}/5  {stars_str}" if note_display else "Non évalué",
+            "Sessions",   str(len(sessions_data)),
+            "Disponible", "Oui" if formateur.disponible else "Non",
+        ]], colWidths=[3.5*cm, 4*cm, 2.5*cm, 2.5*cm, 3*cm, 2.5*cm])
+        rt_note.setStyle(TableStyle([
+            ("BACKGROUND", (0,0),(0,-1), _ICE),
+            ("BACKGROUND", (2,0),(2,-1), _ICE),
+            ("BACKGROUND", (4,0),(4,-1), _ICE),
+            ("FONTNAME",   (0,0),(-1,-1), "Helvetica-Bold"),
+            ("FONTSIZE",   (0,0),(-1,-1), 9),
+            ("TEXTCOLOR",  (1,0),(1,0), _nc(note_display * 20) if note_display else _NAVY),
+            ("GRID",       (0,0),(-1,-1), 0.5, _ICE),
+            ("PADDING",    (0,0),(-1,-1), 8),
+            ("ROWBACKGROUNDS", (0,0),(-1,-1), [_LIGHT]),
+        ]))
+        el.append(rt_note)
+        el.append(Spacer(1, 0.5*cm))
+
+        # Informations personnelles
+        el.append(Paragraph("Informations personnelles", s_h2))
+        el.append(HRFlowable(width="100%", thickness=1, color=_ICE))
+        el.append(Spacer(1, 0.2*cm))
+        info_rows = [
+            ["Nom complet",  nom_complet,                 "Téléphone",  formateur.telephone or "—"],
+            ["Email",        formateur.email or "—",      "Adresse",    formateur.adresse or "—"],
+        ]
+        if formateur.type == "organisme":
+            info_rows.append(["Cabinet", formateur.nom_cabinet or "—", "Site web", formateur.site_web or "—"])
+        it = Table(info_rows, colWidths=[3.5*cm, 6*cm, 3.5*cm, 5*cm])
+        it.setStyle(TableStyle([
+            ("BACKGROUND", (0,0),(0,-1), _LIGHT),
+            ("BACKGROUND", (2,0),(2,-1), _LIGHT),
+            ("FONTNAME",   (0,0),(0,-1), "Helvetica-Bold"),
+            ("FONTNAME",   (2,0),(2,-1), "Helvetica-Bold"),
+            ("FONTSIZE",   (0,0),(-1,-1), 9),
+            ("GRID",       (0,0),(-1,-1), 0.5, _ICE),
+            ("PADDING",    (0,0),(-1,-1), 7),
+        ]))
+        el.append(it)
+        el.append(Spacer(1, 0.5*cm))
+
+        # Domaine & Compétences
+        el.append(Paragraph("Domaine & Compétences", s_h2))
+        el.append(HRFlowable(width="100%", thickness=1, color=_ICE))
+        el.append(Spacer(1, 0.2*cm))
+        dom_label  = DOMAINE_LABELS.get(formateur.domaine or "", formateur.domaine_autre or "—")
+        types_f    = ", ".join(
+            "Formation Continue (DFC)" if v == "continue" else "Apprentissage (DAP)"
+            for v in (formateur.types_formation or [])
+        ) or "—"
+        comp_rows = [
+            ["Domaine",      dom_label,                               "Spécialité",       formateur.specialite or formateur.domaine_autre or "—"],
+            ["Types form.",  types_f,                                 "Expérience",        f"{formateur.experience_annees} an(s)" if formateur.experience_annees else "—"],
+            ["Diplôme",      formateur.diplome or "—",                "Certifications",    formateur.certifications or "—"],
+            ["Langues",      formateur.langues or "—",                "Nb évaluations",    str(formateur.nb_evaluations or 0)],
+        ]
+        ct = Table(comp_rows, colWidths=[3.5*cm, 6*cm, 3.5*cm, 5*cm])
+        ct.setStyle(TableStyle([
+            ("BACKGROUND", (0,0),(0,-1), _LIGHT),
+            ("BACKGROUND", (2,0),(2,-1), _LIGHT),
+            ("FONTNAME",   (0,0),(0,-1), "Helvetica-Bold"),
+            ("FONTNAME",   (2,0),(2,-1), "Helvetica-Bold"),
+            ("FONTSIZE",   (0,0),(-1,-1), 9),
+            ("GRID",       (0,0),(-1,-1), 0.5, _ICE),
+            ("PADDING",    (0,0),(-1,-1), 7),
+        ]))
+        el.append(ct)
+
+        if formateur.bio:
+            el.append(Spacer(1, 0.3*cm))
+            el.append(Paragraph("Biographie :", ParagraphStyle("BioL", parent=st["Normal"],
+                fontSize=9, fontName="Helvetica-Bold", textColor=_NAVY, spaceAfter=4)))
+            el.append(Paragraph(formateur.bio, ParagraphStyle("Bio", parent=st["Normal"],
+                fontSize=9, leading=15, leftIndent=10, textColor=rl_colors.HexColor("#333333"))))
+
+        # Sessions d'évaluation
+        if sessions_data:
+            el.append(Spacer(1, 0.8*cm))
+            el.append(HRFlowable(width="100%", thickness=2, color=_BLUE))
+            el.append(Spacer(1, 0.3*cm))
+            el.append(Paragraph("Résultats des sessions d'évaluation", s_h2))
+            el.append(Spacer(1, 0.2*cm))
+
+            rows = [["#", "Thème de la formation", "Lieu", "Période", "Appr.", "Taux", "Appréciation"]]
+            for i, s in enumerate(sessions_data, 1):
+                pct = s["pct_global"]
+                rows.append([
+                    str(i), s["theme"], s["lieu"] or "—",
+                    f"{_fd(s['periode_debut'])} → {_fd(s['periode_fin'])}",
+                    str(s["nb_apprenants"]), f"{pct}%", _nl(pct),
+                ])
+            if all_pcts:
+                moy = round(sum(all_pcts) / len(all_pcts), 1)
+                rows.append(["—", "MOYENNE GLOBALE", "—", "—", "—", f"{moy}%", _nl(moy)])
+
+            at = Table(rows, colWidths=[0.6*cm, 5.5*cm, 2.5*cm, 3.5*cm, 1.5*cm, 1.8*cm, 2.6*cm])
+            ts = [
+                ("BACKGROUND", (0,0),(-1,0), _NAVY), ("TEXTCOLOR",(0,0),(-1,0), _WHITE),
+                ("FONTNAME",   (0,0),(-1,0), "Helvetica-Bold"),
+                ("FONTSIZE",   (0,0),(-1,-1), 8),
+                ("ALIGN",      (0,0),(-1,-1), "CENTER"),
+                ("ALIGN",      (1,1),(1,-1),  "LEFT"),
+                ("GRID",       (0,0),(-1,-1), 0.5, _ICE),
+                ("PADDING",    (0,0),(-1,-1), 6),
+                ("BACKGROUND", (0,-1),(-1,-1), _BLUE),
+                ("TEXTCOLOR",  (0,-1),(-1,-1), _WHITE),
+                ("FONTNAME",   (0,-1),(-1,-1), "Helvetica-Bold"),
+            ]
+            for ri2, s in enumerate(sessions_data, 1):
+                pct = s["pct_global"]
+                bg  = "#F0FDF4" if pct >= 75 else "#FFFBEB" if pct >= 50 else "#FFF1F2"
+                tc  = _GREEN if pct >= 75 else _ORANGE if pct >= 50 else _RED
+                ts += [("BACKGROUND",(5,ri2),(6,ri2),rl_colors.HexColor(bg)),
+                       ("TEXTCOLOR", (5,ri2),(6,ri2),tc)]
+            at.setStyle(TableStyle(ts))
+            el.append(at)
+
+            if note_calculee:
+                el.append(Spacer(1, 0.4*cm))
+                s_str = ("★" * int(round(note_calculee))) + ("☆" * (5 - int(round(note_calculee))))
+                el.append(Paragraph(
+                    f"Note calculée depuis les évaluations : <b>{note_calculee:.1f}/5</b>  {s_str}",
+                    ParagraphStyle("NoteC", parent=st["Normal"], fontSize=10, textColor=_GOLD,
+                                   alignment=TA_CENTER, spaceAfter=4)
+                ))
+        else:
+            el.append(Spacer(1, 0.5*cm))
+            el.append(Paragraph(
+                "Aucune session d'évaluation enregistrée pour ce formateur.",
+                ParagraphStyle("Empty", parent=st["Normal"], fontSize=10,
+                               textColor=rl_colors.gray, alignment=TA_CENTER)
+            ))
+
+        # Pied de page
+        el.append(Spacer(1, 1*cm))
+        el.append(HRFlowable(width="100%", thickness=1, color=_ICE))
+        el.append(Paragraph(
+            f"Document généré le {date.today().strftime('%d/%m/%Y')} — ONFPP Guinée · Document confidentiel",
+            ParagraphStyle("Footer", parent=st["Normal"], fontSize=8,
+                           textColor=rl_colors.gray, alignment=TA_CENTER, spaceBefore=6)
+        ))
+
+        doc.build(el)
+        buf.seek(0)
+        nom_fichier = f"formateur_{formateur.identifiant_unique or formateur.id}.pdf"
+        resp = HttpResponse(buf, content_type="application/pdf")
+        resp["Content-Disposition"] = f'attachment; filename="{nom_fichier}"'
+        return resp

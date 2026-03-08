@@ -171,10 +171,16 @@ class EvaluationSerializer(serializers.ModelSerializer):
 
 
 class EvaluationSessionSerializer(serializers.ModelSerializer):
-
+    formateur_nom = serializers.SerializerMethodField()
+    
     class Meta:
         model = EvaluationSession
         fields = "__all__"
+    
+    def get_formateur_nom(self, obj):
+        if obj.formateur_ref:
+            return f"{obj.formateur_ref.prenom} {obj.formateur_ref.nom}"
+        return obj.formateur
 
 
 class ApprenantResultSerializer(serializers.Serializer):

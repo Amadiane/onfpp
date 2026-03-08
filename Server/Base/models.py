@@ -68,10 +68,19 @@ class EvaluationSession(models.Model):
     periode_fin = models.DateField()
     lieu = models.CharField(max_length=255)
     organisme = models.CharField(max_length=255)
-    formateur = models.CharField(max_length=255)
+    formateur = models.CharField(max_length=255)  # garde le nom texte
+    # NOUVEAU : lien FK optionnel vers Formateur
+    formateur_ref = models.ForeignKey(
+        "Formateur",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="sessions_evaluation",
+        verbose_name="Formateur (référence)",
+    )
     structure_beneficiaire = models.CharField(max_length=255, blank=True, null=True)
     commentaire_final = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    # ... méthodes inchangées
 
 
     def total_points_apprenant(self, apprenant):
