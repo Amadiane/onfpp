@@ -96,7 +96,7 @@ const buildNavCategories = (role, counts = {}) => {
     ]},
     { title:"Entreprises", color:C.navyMid, icon:Briefcase, roles:["DG","CD","DR"], items:[
       { path:"/entreprise",   label:"Base des entreprises", icon:Briefcase, roles:["DG","CD","DR"] },
-      { path:"/formationDFC", label:"Formation DFC",      icon:Package,   roles:["DG","CD","DR"] },
+      { path:"/formationContinue", label:"Formation DFC",      icon:Package,   roles:["DG","CD","DR"] },
       { path:"/formateurs", label:"Formateurs",      icon:Package,   roles:["DG","CD","DR"] },
     ]},
     // { title:"Rapports", color:C.purple, icon:BarChart3, roles:["DG","CD","DR","CC"], items:[

@@ -655,7 +655,7 @@ const DFCCard = ({ f, dfcId, onClick, delay = 0 }) => {
 /* ═══════════════════════════════════════════════════════════════════
    COMPOSANT PRINCIPAL — FormationDFC
 ═══════════════════════════════════════════════════════════════════ */
-const FormationDFC = () => {
+const FormationContinue = () => {
   const [formations, setFormations] = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [search,     setSearch]     = useState("");
@@ -1087,4 +1087,4 @@ const FormationDFC = () => {
   );
 };
 
-export default FormationDFC;
+export default FormationContinue;

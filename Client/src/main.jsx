@@ -78,8 +78,8 @@ import ServicePost from './components/Admin/ServicePost.jsx';
 import ThonProductPost from './components/Admin/ThonProductPost.jsx';
 import AddUser from './components/Admin/AddUser.jsx';
 import SuiviEvaluation from './components/Admin/SuiviEvaluation.jsx';
-import FormationDFC from './components/Admin/Formationdfc.jsx';
 import Formateurs from './components/Admin/Formateurs.jsx';
+import FormationContinue from './components/Admin/FormationContinue.jsx';
 
 
 
@@ -150,8 +150,8 @@ const router = createBrowserRouter(
         <Route path="thonProductPost" element={<ThonProductPost />} />
         <Route path="addUser" element={<AddUser />} />
         <Route path="suiviEvaluation" element={<SuiviEvaluation />} />
-        <Route path="formationDFC" element={<FormationDFC />} />
         <Route path="formateurs" element={<Formateurs />} />
+        <Route path="formationContinue" element={<FormationContinue />} />
       </Route>
 
     </Route>
