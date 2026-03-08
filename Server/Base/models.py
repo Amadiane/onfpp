@@ -154,6 +154,7 @@ class Evaluation(models.Model):
 
 # models.py
 # models.py
+# models.py
 from django.db import models
 from django.conf import settings
 
@@ -248,16 +249,14 @@ class Formation(models.Model):
 
     @property
     def division(self):
-        mapping = {"apprentissage": "DAP", "continue": "DFC"}
-        return mapping.get(self.type_formation)
+        return {"apprentissage": "DAP", "continue": "DFC"}.get(self.type_formation)
 
     @property
     def division_label(self):
-        mapping = {
+        return {
             "apprentissage": "DAP — Direction Apprentissage Professionnel",
             "continue":      "DFC — Direction Formation Continue",
-        }
-        return mapping.get(self.type_formation, "—")
+        }.get(self.type_formation, "—")
 
     @property
     def identifiant_formation(self):
@@ -282,10 +281,20 @@ class Formation(models.Model):
 
 
 # ══════════════════════════════════════════════════════════════════
-#  MODÈLE CANDIDAT
-#  - La FK vers Centre est supprimée.
-#  - L'antenne est uniquement gérée via `antenne` (CharField avec choices),
-#    aligné avec Formation.antenne.
+#  MODÈLE CANDIDAT / APPRENANT
+#
+#  Nouveaux champs ajoutés pour le suivi insertion :
+#  ─ type_contrat          : CDI, CDD, Stage, Freelance, Sans contrat
+#  ─ poste_occupe          : intitulé du poste obtenu
+#  ─ salaire_insertion     : salaire mensuel brut (GNF)
+#  ─ secteur_activite      : secteur de l'entreprise d'accueil
+#  ─ duree_recherche_emploi: nb de mois entre fin formation et emploi
+#  ─ formation_complementaire : a-t-il suivi d'autres formations ?
+#  ─ satisfaction_formation: note 1-5 sur la formation reçue
+#  ─ statut_emploi_actuel  : en_poste | chomage | independant | etudes | autre
+#  ─ commentaire_insertion : notes libres du conseiller insertion
+#  ─ date_suivi_insertion  : date du dernier contact de suivi
+#  ─ suivi_par             : conseiller qui a fait le suivi insertion
 # ══════════════════════════════════════════════════════════════════
 
 class Candidat(models.Model):
@@ -340,41 +349,50 @@ class Candidat(models.Model):
         ("autre",            "Autre"),
     ]
 
+    # ── NOUVEAUX : Type contrat & statut emploi ────────────────────
+    TYPE_CONTRAT_CHOICES = [
+        ("cdi",       "CDI — Contrat à durée indéterminée"),
+        ("cdd",       "CDD — Contrat à durée déterminée"),
+        ("stage",     "Stage / Apprentissage"),
+        ("freelance", "Freelance / Auto-entrepreneur"),
+        ("informel",  "Emploi informel"),
+        ("sans",      "Sans contrat formalisé"),
+    ]
+
+    STATUT_EMPLOI_CHOICES = [
+        ("en_poste",    "En poste"),
+        ("chomage",     "Au chômage"),
+        ("independant", "Indépendant / Auto-entrepreneur"),
+        ("etudes",      "Poursuite d'études"),
+        ("autre",       "Autre"),
+    ]
+
+    SATISFACTION_CHOICES = [
+        (1, "1 — Très insatisfait"),
+        (2, "2 — Insatisfait"),
+        (3, "3 — Neutre"),
+        (4, "4 — Satisfait"),
+        (5, "5 — Très satisfait"),
+    ]
+
     # ── 1. Informations personnelles ───────────────────────────────
     nom            = models.CharField(max_length=100, verbose_name="Nom")
     prenom         = models.CharField(max_length=100, verbose_name="Prénom")
-    sexe           = models.CharField(max_length=10, choices=SEXE_CHOICES, blank=True, null=True, verbose_name="Sexe")
-    date_naissance = models.DateField(blank=True, null=True, verbose_name="Date de naissance")
-    telephone      = models.CharField(max_length=20, blank=True, null=True, verbose_name="Téléphone")
-    email          = models.EmailField(blank=True, null=True, verbose_name="Email")
-    adresse        = models.TextField(blank=True, null=True, verbose_name="Adresse")
+    sexe           = models.CharField(max_length=10,  choices=SEXE_CHOICES,         blank=True, null=True)
+    date_naissance = models.DateField(blank=True, null=True)
+    telephone      = models.CharField(max_length=20,  blank=True, null=True)
+    email          = models.EmailField(blank=True, null=True)
+    adresse        = models.TextField(blank=True, null=True)
 
-    # ── 2. Situation professionnelle ───────────────────────────────
-    situation     = models.CharField(
-        max_length=20, choices=SITUATION_CHOICES,
-        blank=True, null=True,
-        verbose_name="Situation actuelle",
-    )
-    metier_actuel = models.CharField(
-        max_length=150, blank=True, null=True,
-        verbose_name="Métier actuel",
-    )
+    # ── 2. Situation professionnelle avant formation ───────────────
+    situation     = models.CharField(max_length=20, choices=SITUATION_CHOICES, blank=True, null=True,
+                                     verbose_name="Situation avant formation")
+    metier_actuel = models.CharField(max_length=150, blank=True, null=True, verbose_name="Métier avant formation")
 
     # ── 3. Profil académique & formation ciblée ────────────────────
-    niveau_etude     = models.CharField(
-        max_length=20, choices=NIVEAU_ETUDE_CHOICES,
-        blank=True, null=True,
-        verbose_name="Niveau d'étude",
-    )
-    domaine          = models.CharField(
-        max_length=30, choices=DOMAINE_CHOICES,
-        blank=True, null=True,
-        verbose_name="Domaine",
-    )
-    formation_ciblee = models.CharField(
-        max_length=200, blank=True, null=True,
-        verbose_name="Formation ciblée",
-    )
+    niveau_etude     = models.CharField(max_length=20, choices=NIVEAU_ETUDE_CHOICES, blank=True, null=True)
+    domaine          = models.CharField(max_length=30, choices=DOMAINE_CHOICES,      blank=True, null=True)
+    formation_ciblee = models.CharField(max_length=200, blank=True, null=True, verbose_name="Formation ciblée")
 
     # ── 4. Session de formation ONFPP (FK) ─────────────────────────
     formation = models.ForeignKey(
@@ -385,35 +403,92 @@ class Candidat(models.Model):
         verbose_name="Session de formation",
     )
 
-    # ── 5. Antenne de rattachement (CharField — remplace la FK Centre) ──
+    # ── 5. Antenne de rattachement ─────────────────────────────────
     antenne = models.CharField(
-        max_length=50,
-        choices=ANTENNES_CHOICES,
+        max_length=50, choices=ANTENNES_CHOICES,
         blank=True, null=True,
         verbose_name="Antenne ONFPP",
-        help_text="Code antenne du candidat (conakry, kankan, labe…)",
     )
 
     # ── 6. Suivi ───────────────────────────────────────────────────
-    conseiller = models.CharField(
-        max_length=150, blank=True, null=True,
-        verbose_name="Conseiller responsable",
-    )
+    conseiller = models.CharField(max_length=150, blank=True, null=True, verbose_name="Conseiller responsable")
 
     # ── 7. Compléments ─────────────────────────────────────────────
-    motivation  = models.TextField(blank=True, null=True, verbose_name="Motivation")
-    observation = models.TextField(blank=True, null=True, verbose_name="Observation")
+    motivation  = models.TextField(blank=True, null=True)
+    observation = models.TextField(blank=True, null=True)
+
+    # ══════════════════════════════════════════════════════════════
+    #  BLOC INSERTION PROFESSIONNELLE (enrichi)
+    # ══════════════════════════════════════════════════════════════
+
+    # Statut principal d'insertion
+    insere = models.BooleanField(
+        null=True, blank=True,
+        verbose_name="Inséré en entreprise",
+        help_text="True = apprenant inséré dans une entreprise après la formation",
+    )
+
+    # Détails emploi obtenu
+    entreprise_insertion = models.CharField(max_length=200, blank=True, null=True,
+                                             verbose_name="Entreprise d'insertion")
+    poste_occupe         = models.CharField(max_length=200, blank=True, null=True,
+                                             verbose_name="Poste / Intitulé du métier occupé")
+    type_contrat         = models.CharField(max_length=20,  blank=True, null=True,
+                                             choices=TYPE_CONTRAT_CHOICES,
+                                             verbose_name="Type de contrat")
+    salaire_insertion    = models.PositiveIntegerField(blank=True, null=True,
+                                                       verbose_name="Salaire mensuel brut (GNF)")
+    secteur_activite     = models.CharField(max_length=200, blank=True, null=True,
+                                             verbose_name="Secteur d'activité de l'entreprise")
+    date_insertion       = models.DateField(blank=True, null=True,
+                                             verbose_name="Date de prise de poste")
+
+    # Délai & parcours post-formation
+    duree_recherche_emploi = models.PositiveSmallIntegerField(
+        blank=True, null=True,
+        verbose_name="Durée de recherche d'emploi (mois)",
+        help_text="Nombre de mois entre la fin de la formation et l'obtention du poste",
+    )
+    formation_complementaire = models.BooleanField(
+        null=True, blank=True,
+        verbose_name="Formation complémentaire suivie",
+        help_text="L'apprenant a-t-il suivi une autre formation après l'ONFPP ?",
+    )
+
+    # Qualité & satisfaction
+    satisfaction_formation = models.PositiveSmallIntegerField(
+        blank=True, null=True,
+        choices=SATISFACTION_CHOICES,
+        verbose_name="Satisfaction formation (1-5)",
+    )
+
+    # Statut emploi actuel (suivi continu)
+    statut_emploi_actuel = models.CharField(
+        max_length=20, blank=True, null=True,
+        choices=STATUT_EMPLOI_CHOICES,
+        verbose_name="Statut emploi actuel",
+    )
+
+    # Notes libres du conseiller insertion
+    commentaire_insertion = models.TextField(blank=True, null=True,
+                                              verbose_name="Commentaire insertion (conseiller)")
+
+    # Dates de suivi
+    date_suivi_insertion = models.DateField(blank=True, null=True,
+                                             verbose_name="Date du dernier suivi insertion")
+    suivi_par            = models.CharField(max_length=150, blank=True, null=True,
+                                             verbose_name="Suivi insertion par")
+
+    # ══════════════════════════════════════════════════════════════
 
     # ── 8. Gestion de la fiche ─────────────────────────────────────
     statut_fiche = models.CharField(
-        max_length=20,
-        choices=STATUT_FICHE,
+        max_length=20, choices=STATUT_FICHE,
         default="en_attente",
         verbose_name="Statut de la fiche",
     )
     identifiant_unique = models.CharField(
-        max_length=50,
-        blank=True, null=True,
+        max_length=50, blank=True, null=True,
         unique=True,
         verbose_name="Identifiant unique",
     )
@@ -426,13 +501,13 @@ class Candidat(models.Model):
         related_name="candidats_crees",
         verbose_name="Créé par",
     )
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Créé le")
-    updated_at = models.DateTimeField(auto_now=True,     verbose_name="Modifié le")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering            = ["-created_at"]
-        verbose_name        = "Candidat"
-        verbose_name_plural = "Candidats"
+        verbose_name        = "Candidat / Apprenant"
+        verbose_name_plural = "Candidats / Apprenants"
 
     def __str__(self):
         uid = f" [{self.identifiant_unique}]" if self.identifiant_unique else ""
@@ -442,8 +517,6 @@ class Candidat(models.Model):
 
     @property
     def antenne_label(self):
-        """Libellé lisible de l'antenne."""
-        # Priorité : antenne de la formation liée, sinon antenne du candidat
         if self.formation and self.formation.antenne:
             return dict(ANTENNES_CHOICES).get(self.formation.antenne, self.formation.antenne)
         if self.antenne:
@@ -458,25 +531,29 @@ class Candidat(models.Model):
     def domaine_label(self):
         return dict(self.DOMAINE_CHOICES).get(self.domaine, self.domaine)
 
+    @property
+    def type_contrat_label(self):
+        return dict(self.TYPE_CONTRAT_CHOICES).get(self.type_contrat, self.type_contrat)
+
+    @property
+    def statut_emploi_label(self):
+        return dict(self.STATUT_EMPLOI_CHOICES).get(self.statut_emploi_actuel, self.statut_emploi_actuel)
+
+    @property
+    def taux_insertion(self):
+        """Booléen calculé : True si inséré ET en poste actuel."""
+        return bool(self.insere and self.statut_emploi_actuel == "en_poste")
+
     # ── Génération de l'identifiant unique ────────────────────────
 
     def generate_identifiant(self):
-        """
-        Génère un identifiant unique de type ONFPP-ANNEE-CODE-XXXX.
-        Exemple : ONFPP-2026-CKY-0001
-        """
         from django.utils import timezone
-
         annee = (self.created_at or timezone.now()).year
-
-        # Code antenne : priorité formation > candidat > défaut GN
         code = "GN"
         if self.formation and self.formation.antenne:
             code = ANTENNE_CODES.get(self.formation.antenne, "GN")
         elif self.antenne:
             code = ANTENNE_CODES.get(self.antenne, "GN")
-
-        # Numéro séquentiel parmi les candidats validés de l'année
         count = (
             Candidat.objects
             .filter(created_at__year=annee)
@@ -484,5 +561,4 @@ class Candidat(models.Model):
             .exclude(identifiant_unique__exact="")
             .count()
         ) + 1
-
         return f"ONFPP-{annee}-{code}-{count:04d}"

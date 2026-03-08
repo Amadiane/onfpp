@@ -28,7 +28,7 @@ const adminPaths = [
   "/listePostulantsCommunity", "/listPartners",
   "/listeAbonnement", "/valeurPost",
   "/dashboardAdmin", "/teamMessage", "/formation",
-  "/activitiesPost", "/homePost", "/partnerPost",
+  "/activitiesPost", "/entreprise ", "/partnerPost",
   "/servicePost", "/portfolioPost", "/addUser",
   /* routes du nouveau NavAdmin */
   "/formations", "/sessions", "/suiviEvaluation","/programmes", "/certifications",

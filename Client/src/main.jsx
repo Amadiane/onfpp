@@ -43,7 +43,7 @@ import Plateforms from './components/HeaderSection/Plateforms.jsx';
 import Videotheque from './components/HeaderSection/Videotheque.jsx';
 import Phototheque from './components/HeaderSection/Phototheque.jsx';
 import Document from './components/HeaderSection/Document.jsx';
-import HomePost from './components/Admin/HomePost.jsx';
+import Entreprise  from './components/Admin/Entreprise.jsx';
 import Actualites from './components/HeaderSection/Actualites.jsx';
 import NousRejoindreHeader from './components/HeaderSection/NousRejoindreHeader.jsx';
 import Activities from './components/HeaderSection/Activities.jsx';
@@ -110,7 +110,7 @@ const router = createBrowserRouter(
       <Route path="videotheque" element={<Videotheque />} />
       <Route path="phototheque" element={<Phototheque />} />
       <Route path="document" element={<Document />} />
-      <Route path="homePost" element={<HomePost />} />
+      <Route path="entreprise " element={<Entreprise  />} />
       <Route path="actualites" element={<Actualites />} />
       <Route path="nousRejoindreHeader" element={<NousRejoindreHeader />} />
       <Route path="activities" element={<Activities />} />

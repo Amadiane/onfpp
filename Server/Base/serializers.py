@@ -210,7 +210,6 @@ class ApprenantResultSerializer(serializers.Serializer):
 
 # serializers.py
 # serializers.py
-# serializers.py
 from rest_framework import serializers
 from .models import Candidat, Formation, ANTENNE_CODES, ANTENNES_CHOICES
 
@@ -220,9 +219,6 @@ from .models import Candidat, Formation, ANTENNE_CODES, ANTENNES_CHOICES
 # ══════════════════════════════════════════════════════════════════
 
 class FormationSerializer(serializers.ModelSerializer):
-    """
-    Sérialise une session de Formation ONFPP.
-    """
 
     antenne_display        = serializers.CharField(source="get_antenne_display",        read_only=True)
     type_formation_display = serializers.CharField(source="get_type_formation_display", read_only=True)
@@ -269,51 +265,40 @@ class FormationSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+    def get_nb_candidats(self, obj):
+        return getattr(obj, "_nb_candidats", obj.candidats.count())
+
     def get_created_by_nom(self, obj):
         if obj.created_by:
-            fn   = getattr(obj.created_by, "first_name", "") or ""
-            ln   = getattr(obj.created_by, "last_name",  "") or ""
-            full = f"{fn} {ln}".strip()
-            return full or obj.created_by.username
+            return (
+                f"{obj.created_by.first_name} {obj.created_by.last_name}".strip()
+                or obj.created_by.username
+            )
         return None
 
-    def get_nb_candidats(self, obj):
-        return obj.candidats.count()
-
     def validate(self, data):
-        type_f     = data.get("type_formation",      getattr(self.instance, "type_formation",      None))
-        entreprise = data.get("entreprise_formation", getattr(self.instance, "entreprise_formation", None))
-        date_debut = data.get("date_debut",           getattr(self.instance, "date_debut",           None))
-        date_fin   = data.get("date_fin",             getattr(self.instance, "date_fin",             None))
-
-        if type_f == "continue" and not entreprise:
-            raise serializers.ValidationError({
-                "entreprise_formation": "Ce champ est obligatoire pour une formation continue (DFC)."
-            })
-
-        if date_debut and date_fin and date_fin < date_debut:
-            raise serializers.ValidationError({
-                "date_fin": "La date de fin doit être postérieure à la date de début."
-            })
-
-        if type_f == "apprentissage":
-            data["entreprise_formation"] = None
-
+        type_f = data.get("type_formation") or getattr(self.instance, "type_formation", None)
+        if type_f == "continue" and not (
+            data.get("entreprise_formation") or
+            getattr(self.instance, "entreprise_formation", None)
+        ):
+            raise serializers.ValidationError(
+                {"entreprise_formation": "Une formation continue (DFC) nécessite une entreprise."}
+            )
         return data
 
 
 # ══════════════════════════════════════════════════════════════════
-#  SERIALIZER CANDIDAT — VERSION LÉGÈRE (liste apprenants)
+#  SERIALIZER CANDIDAT — VERSION LÉGÈRE (liste apprenants / formation)
 # ══════════════════════════════════════════════════════════════════
 
 class CandidatLightSerializer(serializers.ModelSerializer):
-    """
-    Version allégée pour GET /formations/{id}/candidats/
-    """
-    situation_label = serializers.CharField(read_only=True)
-    domaine_label   = serializers.CharField(read_only=True)
-    antenne_label   = serializers.CharField(read_only=True)
-    antenne_display = serializers.SerializerMethodField()
+    situation_label      = serializers.CharField(read_only=True)
+    domaine_label        = serializers.CharField(read_only=True)
+    antenne_label        = serializers.CharField(read_only=True)
+    type_contrat_label   = serializers.CharField(read_only=True)
+    statut_emploi_label  = serializers.CharField(read_only=True)
+    antenne_display      = serializers.SerializerMethodField()
 
     class Meta:
         model  = Candidat
@@ -327,21 +312,28 @@ class CandidatLightSerializer(serializers.ModelSerializer):
             "email",
             "situation",
             "situation_label",
-            "metier_actuel",
-            "niveau_etude",
             "domaine",
             "domaine_label",
             "formation_ciblee",
             "antenne",
             "antenne_display",
             "antenne_label",
-            "conseiller",
             "statut_fiche",
+            # Insertion
+            "insere",
+            "entreprise_insertion",
+            "poste_occupe",
+            "type_contrat",
+            "type_contrat_label",
+            "statut_emploi_actuel",
+            "statut_emploi_label",
+            "date_insertion",
             "created_at",
         ]
 
     def get_antenne_display(self, obj):
-        return dict(ANTENNES_CHOICES).get(obj.antenne, obj.antenne) if obj.antenne else None
+        src = obj.formation.antenne if obj.formation and obj.formation.antenne else obj.antenne
+        return dict(ANTENNES_CHOICES).get(src, src) if src else None
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -349,21 +341,17 @@ class CandidatLightSerializer(serializers.ModelSerializer):
 # ══════════════════════════════════════════════════════════════════
 
 class CandidatSerializer(serializers.ModelSerializer):
-    """
-    Sérialise un Candidat / Apprenant ONFPP.
 
-    Notes importantes :
-      - `antenne` est maintenant un simple CharField (plus de FK Centre).
-      - `formation_data` permet de créer/lier une Formation en une seule requête.
-    """
-
-    # Lecture enrichie
-    antenne_display  = serializers.SerializerMethodField()
-    antenne_label    = serializers.CharField(read_only=True)
-    formation_detail = FormationSerializer(source="formation", read_only=True)
-    situation_label  = serializers.CharField(read_only=True)
-    domaine_label    = serializers.CharField(read_only=True)
-    created_by_nom   = serializers.SerializerMethodField()
+    # Champs calculés en lecture
+    antenne_display      = serializers.SerializerMethodField()
+    antenne_label        = serializers.CharField(read_only=True)
+    formation_detail     = FormationSerializer(source="formation", read_only=True)
+    situation_label      = serializers.CharField(read_only=True)
+    domaine_label        = serializers.CharField(read_only=True)
+    type_contrat_label   = serializers.CharField(read_only=True)
+    statut_emploi_label  = serializers.CharField(read_only=True)
+    taux_insertion       = serializers.BooleanField(read_only=True)
+    created_by_nom       = serializers.SerializerMethodField()
 
     # Écriture formation imbriquée (optionnel)
     formation_data = serializers.JSONField(write_only=True, required=False, allow_null=True)
@@ -381,7 +369,7 @@ class CandidatSerializer(serializers.ModelSerializer):
             "telephone",
             "email",
             "adresse",
-            # Situation professionnelle
+            # Situation avant formation
             "situation",
             "situation_label",
             "metier_actuel",
@@ -394,18 +382,35 @@ class CandidatSerializer(serializers.ModelSerializer):
             "formation",
             "formation_detail",
             "formation_data",
-            # Antenne (CharField simple)
+            # Antenne
             "antenne",
             "antenne_display",
             "antenne_label",
-            # Suivi
+            # Suivi pédagogique
             "conseiller",
-            # Compléments
             "motivation",
             "observation",
             # Gestion fiche
             "statut_fiche",
-            # Traçabilité
+            # ── BLOC INSERTION ──────────────────────────────────
+            "insere",
+            "entreprise_insertion",
+            "poste_occupe",
+            "type_contrat",
+            "type_contrat_label",
+            "salaire_insertion",
+            "secteur_activite",
+            "date_insertion",
+            "duree_recherche_emploi",
+            "formation_complementaire",
+            "satisfaction_formation",
+            "statut_emploi_actuel",
+            "statut_emploi_label",
+            "taux_insertion",
+            "commentaire_insertion",
+            "date_suivi_insertion",
+            "suivi_par",
+            # ────────────────────────────────────────────────────
             "created_by",
             "created_by_nom",
             "created_at",
@@ -414,127 +419,107 @@ class CandidatSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "identifiant_unique",
-            "statut_fiche",
             "formation_detail",
             "antenne_display",
             "antenne_label",
             "situation_label",
             "domaine_label",
+            "type_contrat_label",
+            "statut_emploi_label",
+            "taux_insertion",
             "created_by",
             "created_by_nom",
             "created_at",
             "updated_at",
         ]
         extra_kwargs = {
-            "antenne":  {"required": False, "allow_null": True, "allow_blank": True},
-            "formation": {"required": False, "allow_null": True},
+            "antenne":                   {"required": False, "allow_null": True, "allow_blank": True},
+            "formation":                 {"required": False, "allow_null": True},
+            "insere":                    {"required": False, "allow_null": True},
+            "entreprise_insertion":      {"required": False, "allow_null": True, "allow_blank": True},
+            "poste_occupe":              {"required": False, "allow_null": True, "allow_blank": True},
+            "type_contrat":              {"required": False, "allow_null": True, "allow_blank": True},
+            "salaire_insertion":         {"required": False, "allow_null": True},
+            "secteur_activite":          {"required": False, "allow_null": True, "allow_blank": True},
+            "date_insertion":            {"required": False, "allow_null": True},
+            "duree_recherche_emploi":    {"required": False, "allow_null": True},
+            "formation_complementaire":  {"required": False, "allow_null": True},
+            "satisfaction_formation":    {"required": False, "allow_null": True},
+            "statut_emploi_actuel":      {"required": False, "allow_null": True, "allow_blank": True},
+            "commentaire_insertion":     {"required": False, "allow_null": True, "allow_blank": True},
+            "date_suivi_insertion":      {"required": False, "allow_null": True},
+            "suivi_par":                 {"required": False, "allow_null": True, "allow_blank": True},
+            "statut_fiche":              {"required": False},
         }
 
-    # ── Champs calculés ────────────────────────────────────────────
+    # ── Champs calculés ───────────────────────────────────────────
 
     def get_antenne_display(self, obj):
-        return dict(ANTENNES_CHOICES).get(obj.antenne, obj.antenne) if obj.antenne else None
+        src = obj.formation.antenne if obj.formation and obj.formation.antenne else obj.antenne
+        return dict(ANTENNES_CHOICES).get(src, src) if src else None
 
     def get_created_by_nom(self, obj):
         if obj.created_by:
-            fn   = getattr(obj.created_by, "first_name", "") or ""
-            ln   = getattr(obj.created_by, "last_name",  "") or ""
-            full = f"{fn} {ln}".strip()
-            return full or obj.created_by.username
+            return (
+                f"{obj.created_by.first_name} {obj.created_by.last_name}".strip()
+                or obj.created_by.username
+            )
         return None
 
-    # ── Validations ────────────────────────────────────────────────
-
-    def validate_email(self, value):
-        if not value:
-            return None
-        qs = Candidat.objects.filter(email=value)
-        if self.instance:
-            qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise serializers.ValidationError("Un candidat avec cet email existe déjà.")
-        return value
-
-    def validate(self, data):
-        # Convertit chaînes vides → None pour tous les champs optionnels
-        optional_fields = [
-            "sexe", "date_naissance", "telephone", "email", "adresse",
-            "situation", "metier_actuel", "niveau_etude", "domaine",
-            "formation_ciblee", "antenne", "conseiller",
-            "motivation", "observation",
-        ]
-        for field in optional_fields:
-            if field in data and data[field] == "":
-                data[field] = None
-
-        # Validation des données formation imbriquées
-        fd = data.get("formation_data")
-        if fd and isinstance(fd, dict):
-            if fd.get("type_formation") == "continue" and not fd.get("entreprise_formation"):
-                raise serializers.ValidationError({
-                    "formation_data": "entreprise_formation est obligatoire pour une formation continue."
-                })
-            d1 = fd.get("date_debut")
-            d2 = fd.get("date_fin")
-            if d1 and d2 and str(d2) < str(d1):
-                raise serializers.ValidationError({
-                    "formation_data": "La date de fin doit être postérieure à la date de début."
-                })
-
-        return data
-
-    # ── Helpers ────────────────────────────────────────────────────
-
-    def _build_formation(self, fd, created_by=None):
-        """
-        Crée une nouvelle instance Formation depuis un dict formation_data.
-        Retourne l'instance sauvegardée, ou None si nom_formation manquant.
-        """
-        if not fd or not fd.get("nom_formation"):
-            return None
-
-        if fd.get("type_formation") == "apprentissage":
-            fd["entreprise_formation"] = None
-
-        formation = Formation(
-            nom_formation        = fd.get("nom_formation", "").strip(),
-            organisme_formation  = fd.get("organisme_formation")  or None,
-            nom_formateur        = fd.get("nom_formateur")         or None,
-            date_debut           = fd.get("date_debut")            or None,
-            date_fin             = fd.get("date_fin")              or None,
-            type_formation       = fd.get("type_formation")        or None,
-            entreprise_formation = fd.get("entreprise_formation")  or None,
-            antenne              = fd.get("antenne", "conakry"),
-            created_by           = created_by,
-        )
-        formation.save()
-        return formation
-
-    # ── Create / Update ────────────────────────────────────────────
+    # ── Création avec formation imbriquée ─────────────────────────
 
     def create(self, validated_data):
-        fd         = validated_data.pop("formation_data", None)
-        created_by = validated_data.get("created_by")
+        formation_data = validated_data.pop("formation_data", None)
 
-        if fd:
-            nouvelle_formation = self._build_formation(fd, created_by)
-            if nouvelle_formation:
-                validated_data["formation"] = nouvelle_formation
-                # Si l'antenne n'est pas renseignée sur le candidat,
-                # on hérite de celle de la formation
-                if not validated_data.get("antenne"):
-                    validated_data["antenne"] = nouvelle_formation.antenne
+        # Créer ou réutiliser la formation
+        if formation_data and isinstance(formation_data, dict):
+            f_id = formation_data.get("id")
+            if f_id:
+                try:
+                    formation = Formation.objects.get(pk=f_id)
+                except Formation.DoesNotExist:
+                    formation = None
+            else:
+                formation_data.pop("created_by", None)
+                formation = Formation.objects.create(
+                    created_by=self.context["request"].user,
+                    **{k: v for k, v in formation_data.items() if k != "id"},
+                )
+            validated_data["formation"] = formation
 
-        return super().create(validated_data)
+        # Hériter antenne de la formation si absente
+        if not validated_data.get("antenne") and validated_data.get("formation"):
+            validated_data["antenne"] = validated_data["formation"].antenne
+
+        return Candidat.objects.create(**validated_data)
 
     def update(self, instance, validated_data):
-        fd = validated_data.pop("formation_data", None)
+        validated_data.pop("formation_data", None)
+        # Hériter antenne de la formation si absente
+        if not validated_data.get("antenne") and instance.formation:
+            validated_data["antenne"] = instance.formation.antenne
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
 
-        if fd:
-            nouvelle_formation = self._build_formation(fd)
-            if nouvelle_formation:
-                validated_data["formation"] = nouvelle_formation
-                if not validated_data.get("antenne"):
-                    validated_data["antenne"] = nouvelle_formation.antenne
-
-        return super().update(instance, validated_data)
+    def validate(self, data):
+        optional_fields = [
+            "nom", "prenom", "sexe", "date_naissance",
+            "telephone", "email", "adresse",
+            "situation", "metier_actuel",
+            "niveau_etude", "domaine", "formation_ciblee",
+            "formation", "antenne", "conseiller",
+            "motivation", "observation",
+            "insere", "entreprise_insertion", "poste_occupe",
+            "type_contrat", "salaire_insertion", "secteur_activite",
+            "date_insertion", "duree_recherche_emploi",
+            "formation_complementaire", "satisfaction_formation",
+            "statut_emploi_actuel", "commentaire_insertion",
+            "date_suivi_insertion", "suivi_par",
+        ]
+        if self.instance:
+            for field in optional_fields:
+                if field not in data:
+                    data[field] = getattr(self.instance, field)
+        return data
