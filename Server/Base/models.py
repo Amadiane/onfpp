@@ -562,3 +562,245 @@ class Candidat(models.Model):
             .count()
         ) + 1
         return f"ONFPP-{annee}-{code}-{count:04d}"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# À ajouter dans models.py
+
+from django.db import models
+from django.conf import settings
+
+# ══════════════════════════════════════════════════════════════════
+#  CONSTANTES
+# ══════════════════════════════════════════════════════════════════
+
+STATUT_REALISATION_CHOICES = [
+    ("planifiee",    "Planifiée"),
+    ("en_cours",     "En cours de traitement"),
+    ("realisee",     "Réalisée"),
+    ("annulee",      "Annulée"),
+    ("reportee",     "Reportée"),
+]
+
+ANTENNES_CHOICES = [
+    ("conakry",    "Conakry"),
+    ("forecariah", "Forecariah"),
+    ("boke",       "Boké"),
+    ("kindia",     "Kindia"),
+    ("labe",       "Labé"),
+    ("mamou",      "Mamou"),
+    ("faranah",    "Faranah"),
+    ("kankan",     "Kankan"),
+    ("siguiri",    "Siguiri"),
+    ("nzerekore",  "N'Zérékoré"),
+]
+
+ANTENNE_CODES = {
+    "conakry": "CKY", "forecariah": "FRC", "boke": "BOK",
+    "kindia": "KND", "labe": "LBE", "mamou": "MMU",
+    "faranah": "FRN", "kankan": "KNK", "siguiri": "SGR", "nzerekore": "NZR",
+}
+
+
+# ══════════════════════════════════════════════════════════════════
+#  PLAN DE FORMATION DFC — Entreprise
+# ══════════════════════════════════════════════════════════════════
+
+class EntrepriseFormation(models.Model):
+    """
+    Représente un plan de formation soumis par une entreprise dans le cadre
+    de la Division Formation Continue (DFC) de l'ONFPP.
+    """
+
+    # ── Identification ─────────────────────────────────────────────
+    identifiant_unique = models.CharField(
+        max_length=60, blank=True, null=True, unique=True,
+        verbose_name="Identifiant unique",
+    )
+    nom_entreprise = models.CharField(max_length=255, verbose_name="Nom de l'entreprise")
+    secteur_activite = models.CharField(max_length=200, blank=True, null=True, verbose_name="Secteur d'activité")
+    adresse_entreprise = models.TextField(blank=True, null=True, verbose_name="Adresse de l'entreprise")
+    contact_rh = models.CharField(max_length=150, blank=True, null=True, verbose_name="Contact RH / Responsable formation")
+    telephone_entreprise = models.CharField(max_length=30, blank=True, null=True)
+    email_entreprise = models.EmailField(blank=True, null=True)
+
+    # ── Intitulé & description de la formation ─────────────────────
+    intitule_formation = models.CharField(max_length=255, verbose_name="Intitulé de la formation")
+    objectifs = models.TextField(blank=True, null=True, verbose_name="Objectifs de la formation")
+    antenne = models.CharField(max_length=50, choices=ANTENNES_CHOICES, verbose_name="Antenne ONFPP")
+
+    # ── Effectifs ──────────────────────────────────────────────────
+    nb_hommes = models.PositiveIntegerField(default=0, verbose_name="Nombre d'hommes")
+    nb_femmes = models.PositiveIntegerField(default=0, verbose_name="Nombre de femmes")
+
+    @property
+    def nb_total_employes(self):
+        return self.nb_hommes + self.nb_femmes
+
+    # ── Dates ──────────────────────────────────────────────────────
+    date_soumission = models.DateField(auto_now_add=True, verbose_name="Date de soumission")
+    date_debut_prevue = models.DateField(blank=True, null=True, verbose_name="Date de début prévue")
+    date_fin_prevue = models.DateField(blank=True, null=True, verbose_name="Date de fin prévue")
+    date_realisation = models.DateField(blank=True, null=True, verbose_name="Date de réalisation effective")
+
+    # ── Statut ─────────────────────────────────────────────────────
+    statut_realisation = models.CharField(
+        max_length=20,
+        choices=STATUT_REALISATION_CHOICES,
+        default="planifiee",
+        verbose_name="Statut de réalisation",
+    )
+
+    # ── Plan de formation (fichier joint) ──────────────────────────
+    plan_formation_fichier = models.FileField(
+        upload_to="plans_formation/",
+        blank=True, null=True,
+        verbose_name="Plan de formation (fichier)",
+        help_text="PDF, Word, Excel acceptés",
+    )
+    plan_formation_url = models.URLField(
+        blank=True, null=True,
+        verbose_name="Lien vers le plan de formation",
+    )
+    plan_formation_nom = models.CharField(
+        max_length=255, blank=True, null=True,
+        verbose_name="Nom du fichier plan de formation",
+    )
+
+    # ── Résultats / rapport ────────────────────────────────────────
+    nb_formes_hommes = models.PositiveIntegerField(
+        default=0, verbose_name="Nombre d'hommes formés (réalisé)",
+    )
+    nb_formes_femmes = models.PositiveIntegerField(
+        default=0, verbose_name="Nombre de femmes formées (réalisé)",
+    )
+    rapport_final = models.TextField(blank=True, null=True, verbose_name="Rapport / Observations finales")
+
+    # ── Lien vers session d'évaluation ────────────────────────────
+    session_evaluation = models.ForeignKey(
+        "EvaluationSession",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="entreprise_formations",
+        verbose_name="Session d'évaluation liée",
+    )
+
+    # ── Traçabilité ────────────────────────────────────────────────
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="entreprise_formations_creees",
+        verbose_name="Créé par",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Plan de formation entreprise (DFC)"
+        verbose_name_plural = "Plans de formation entreprises (DFC)"
+
+    def __str__(self):
+        return f"{self.nom_entreprise} — {self.intitule_formation} [{self.identifiant_unique or '—'}]"
+
+    def generate_identifiant(self):
+        from django.utils import timezone
+        annee = (self.created_at or timezone.now()).year
+        code = ANTENNE_CODES.get(self.antenne, "GN")
+        count = (
+            EntrepriseFormation.objects
+            .filter(created_at__year=annee)
+            .exclude(identifiant_unique__isnull=True)
+            .exclude(identifiant_unique__exact="")
+            .count()
+        ) + 1
+        return f"DFC-ENT-{code}-{annee}-{count:04d}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if not self.identifiant_unique:
+            self.identifiant_unique = self.generate_identifiant()
+            EntrepriseFormation.objects.filter(pk=self.pk).update(
+                identifiant_unique=self.identifiant_unique
+            )
+
+
+# ══════════════════════════════════════════════════════════════════
+#  MODULE DU PLAN DE FORMATION
+# ══════════════════════════════════════════════════════════════════
+
+class ModulePlanFormation(models.Model):
+    """
+    Contenu détaillé du plan de formation : chaque module/thème
+    prévu dans le plan soumis par l'entreprise.
+    """
+
+    entreprise_formation = models.ForeignKey(
+        EntrepriseFormation,
+        on_delete=models.CASCADE,
+        related_name="modules",
+        verbose_name="Plan de formation",
+    )
+
+    # ── Contenu ────────────────────────────────────────────────────
+    intitule_module = models.CharField(max_length=255, verbose_name="Intitulé du module")
+    contenu = models.TextField(blank=True, null=True, verbose_name="Contenu / Programme")
+    duree_heures = models.PositiveSmallIntegerField(
+        blank=True, null=True, verbose_name="Durée (heures)",
+    )
+    formateur = models.CharField(max_length=200, blank=True, null=True, verbose_name="Formateur prévu")
+    lieu = models.CharField(max_length=200, blank=True, null=True, verbose_name="Lieu de formation")
+
+    # ── Planification ──────────────────────────────────────────────
+    date_debut_prevue = models.DateField(blank=True, null=True, verbose_name="Début prévu")
+    date_fin_prevue = models.DateField(blank=True, null=True, verbose_name="Fin prévue")
+
+    # ── Réalisation ────────────────────────────────────────────────
+    date_realisation = models.DateField(blank=True, null=True, verbose_name="Date de réalisation")
+    statut = models.CharField(
+        max_length=20,
+        choices=STATUT_REALISATION_CHOICES,
+        default="planifiee",
+        verbose_name="Statut",
+    )
+
+    # ── Effectifs module ───────────────────────────────────────────
+    nb_hommes_module = models.PositiveSmallIntegerField(default=0, verbose_name="Hommes (module)")
+    nb_femmes_module = models.PositiveSmallIntegerField(default=0, verbose_name="Femmes (module)")
+
+    @property
+    def nb_total_module(self):
+        return self.nb_hommes_module + self.nb_femmes_module
+
+    observations = models.TextField(blank=True, null=True)
+    ordre = models.PositiveSmallIntegerField(default=0, verbose_name="Ordre d'affichage")
+
+    class Meta:
+        ordering = ["ordre", "date_debut_prevue"]
+        verbose_name = "Module du plan de formation"
+        verbose_name_plural = "Modules du plan de formation"
+
+    def __str__(self):
+        return f"{self.entreprise_formation.nom_entreprise} — Module: {self.intitule_module}"

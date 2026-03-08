@@ -1278,3 +1278,231 @@ class CandidatViewSet(viewsets.ModelViewSet):
                                           .aggregate(avg=Avg("satisfaction_formation"))["avg"],
             "avec_formation_complementaire": qs.filter(formation_complementaire=True).count(),
         })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# À ajouter dans views.py
+
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django.db.models import Q, Count, Sum, Avg
+
+from .models import EntrepriseFormation, ModulePlanFormation
+from .serializers import (
+    EntrepriseFormationSerializer,
+    EntrepriseFormationLightSerializer,
+    ModulePlanFormationSerializer,
+)
+
+
+class EntrepriseFormationViewSet(viewsets.ModelViewSet):
+    """
+    CRUD complet pour les plans de formation entreprises (DFC).
+
+    GET    /api/entreprise-formations/           → liste
+    POST   /api/entreprise-formations/           → créer
+    GET    /api/entreprise-formations/{id}/      → détail (avec modules)
+    PATCH  /api/entreprise-formations/{id}/      → modifier
+    DELETE /api/entreprise-formations/{id}/      → supprimer
+
+    Actions métier :
+    GET  /api/entreprise-formations/{id}/modules/           → modules du plan
+    POST /api/entreprise-formations/{id}/add_module/        → ajouter un module
+    PATCH /api/entreprise-formations/{id}/update_statut/    → changer statut
+    GET  /api/entreprise-formations/stats/                  → statistiques globales
+
+    Filtres :
+      ?search=        → nom_entreprise, intitule_formation, identifiant_unique
+      ?antenne=       → code antenne
+      ?statut=        → planifiee | en_cours | realisee | annulee | reportee
+      ?annee=         → année de soumission (ex: 2026)
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return EntrepriseFormationLightSerializer
+        return EntrepriseFormationSerializer
+
+    def get_queryset(self):
+        qs = EntrepriseFormation.objects.select_related(
+            "created_by", "session_evaluation"
+        ).prefetch_related("modules").order_by("-created_at")
+
+        search = self.request.query_params.get("search", "").strip()
+        if search:
+            qs = qs.filter(
+                Q(nom_entreprise__icontains=search) |
+                Q(intitule_formation__icontains=search) |
+                Q(identifiant_unique__icontains=search) |
+                Q(secteur_activite__icontains=search) |
+                Q(contact_rh__icontains=search)
+            )
+
+        antenne = self.request.query_params.get("antenne", "").strip()
+        if antenne:
+            qs = qs.filter(antenne=antenne)
+
+        statut = self.request.query_params.get("statut", "").strip()
+        if statut:
+            qs = qs.filter(statut_realisation=statut)
+
+        annee = self.request.query_params.get("annee", "").strip()
+        if annee.isdigit():
+            qs = qs.filter(date_soumission__year=int(annee))
+
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    # ── GET modules d'un plan ─────────────────────────────────────
+    @action(detail=True, methods=["get"], url_path="modules")
+    def modules(self, request, pk=None):
+        entreprise_formation = self.get_object()
+        modules = entreprise_formation.modules.all().order_by("ordre", "date_debut_prevue")
+        serializer = ModulePlanFormationSerializer(modules, many=True)
+        return Response({
+            "identifiant":   entreprise_formation.identifiant_unique,
+            "entreprise":    entreprise_formation.nom_entreprise,
+            "intitule":      entreprise_formation.intitule_formation,
+            "nb_modules":    modules.count(),
+            "nb_planifies":  modules.filter(statut="planifiee").count(),
+            "nb_en_cours":   modules.filter(statut="en_cours").count(),
+            "nb_realises":   modules.filter(statut="realisee").count(),
+            "modules":       serializer.data,
+        })
+
+    # ── POST ajouter un module ────────────────────────────────────
+    @action(detail=True, methods=["post"], url_path="add-module")
+    def add_module(self, request, pk=None):
+        entreprise_formation = self.get_object()
+        serializer = ModulePlanFormationSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(entreprise_formation=entreprise_formation)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    # ── PATCH mettre à jour statut ────────────────────────────────
+    @action(detail=True, methods=["patch"], url_path="update-statut")
+    def update_statut(self, request, pk=None):
+        obj = self.get_object()
+        new_statut = request.data.get("statut_realisation")
+        valid = [c[0] for c in EntrepriseFormation.STATUT_REALISATION_CHOICES
+                 if hasattr(EntrepriseFormation, 'STATUT_REALISATION_CHOICES')]
+
+        # Utiliser les choix directement du modèle
+        valid_statuts = ["planifiee", "en_cours", "realisee", "annulee", "reportee"]
+        if new_statut not in valid_statuts:
+            return Response(
+                {"detail": f"Statut invalide. Valeurs possibles : {valid_statuts}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        obj.statut_realisation = new_statut
+        if new_statut == "realisee" and request.data.get("date_realisation"):
+            obj.date_realisation = request.data["date_realisation"]
+        obj.save()
+        return Response(EntrepriseFormationSerializer(obj, context={"request": request}).data)
+
+    # ── GET stats globales ────────────────────────────────────────
+    @action(detail=False, methods=["get"], url_path="stats")
+    def stats(self, request):
+        qs = EntrepriseFormation.objects.all()
+        inseres = qs.aggregate(
+            total_hommes=Sum("nb_hommes"),
+            total_femmes=Sum("nb_femmes"),
+            total_formes_h=Sum("nb_formes_hommes"),
+            total_formes_f=Sum("nb_formes_femmes"),
+        )
+        return Response({
+            "total":             qs.count(),
+            "planifiees":        qs.filter(statut_realisation="planifiee").count(),
+            "en_cours":          qs.filter(statut_realisation="en_cours").count(),
+            "realisees":         qs.filter(statut_realisation="realisee").count(),
+            "annulees":          qs.filter(statut_realisation="annulee").count(),
+            "reportees":         qs.filter(statut_realisation="reportee").count(),
+            "total_employes_prevus": (inseres["total_hommes"] or 0) + (inseres["total_femmes"] or 0),
+            "total_hommes_prevus":   inseres["total_hommes"] or 0,
+            "total_femmes_prevus":   inseres["total_femmes"] or 0,
+            "total_formes":          (inseres["total_formes_h"] or 0) + (inseres["total_formes_f"] or 0),
+            "total_formes_hommes":   inseres["total_formes_h"] or 0,
+            "total_formes_femmes":   inseres["total_formes_f"] or 0,
+            "par_antenne": list(
+                qs.values("antenne").annotate(nb=Count("id")).order_by("-nb")
+            ),
+            "par_statut": list(
+                qs.values("statut_realisation").annotate(nb=Count("id")).order_by("-nb")
+            ),
+            "par_secteur": list(
+                qs.exclude(secteur_activite__isnull=True)
+                .values("secteur_activite").annotate(nb=Count("id")).order_by("-nb")[:8]
+            ),
+        })
+
+
+# ══════════════════════════════════════════════════════════════════
+#  VIEWSET MODULE
+# ══════════════════════════════════════════════════════════════════
+
+class ModulePlanFormationViewSet(viewsets.ModelViewSet):
+    """
+    CRUD sur les modules d'un plan de formation.
+    GET/PATCH/DELETE /api/modules-formation/{id}/
+    """
+    queryset           = ModulePlanFormation.objects.all()
+    serializer_class   = ModulePlanFormationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        plan_id = self.request.query_params.get("plan")
+        if plan_id:
+            qs = qs.filter(entreprise_formation_id=plan_id)
+        return qs
+
+    @action(detail=True, methods=["patch"], url_path="update-statut")
+    def update_statut(self, request, pk=None):
+        module = self.get_object()
+        new_statut = request.data.get("statut")
+        valid = ["planifiee", "en_cours", "realisee", "annulee", "reportee"]
+        if new_statut not in valid:
+            return Response({"detail": f"Statut invalide."}, status=400)
+        module.statut = new_statut
+        if new_statut == "realisee" and request.data.get("date_realisation"):
+            module.date_realisation = request.data["date_realisation"]
+        module.save()
+        return Response(ModulePlanFormationSerializer(module).data)

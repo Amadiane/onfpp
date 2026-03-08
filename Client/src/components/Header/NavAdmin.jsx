@@ -95,7 +95,7 @@ const buildNavCategories = (role, counts = {}) => {
       { path:"/enquete-insertion", label:"Enquête insertion 3 mois",icon:Clock,        roles:["CC"] },
     ]},
     { title:"Entreprises", color:C.navyMid, icon:Briefcase, roles:["DG","CD","DR"], items:[
-      { path:"/entreprises",   label:"Base des entreprises", icon:Briefcase, roles:["DG","CD","DR"] },
+      { path:"/entreprise",   label:"Base des entreprises", icon:Briefcase, roles:["DG","CD","DR"] },
       { path:"/offres-emploi", label:"Offres d'emploi",      icon:Package,   roles:["DG","CD","DR"] },
     ]},
     // { title:"Rapports", color:C.purple, icon:BarChart3, roles:["DG","CD","DR","CC"], items:[

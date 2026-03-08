@@ -43,7 +43,6 @@ import Plateforms from './components/HeaderSection/Plateforms.jsx';
 import Videotheque from './components/HeaderSection/Videotheque.jsx';
 import Phototheque from './components/HeaderSection/Phototheque.jsx';
 import Document from './components/HeaderSection/Document.jsx';
-import Entreprise  from './components/Admin/Entreprise.jsx';
 import Actualites from './components/HeaderSection/Actualites.jsx';
 import NousRejoindreHeader from './components/HeaderSection/NousRejoindreHeader.jsx';
 import Activities from './components/HeaderSection/Activities.jsx';
@@ -63,7 +62,7 @@ import ListPartners from './components/Admin/ListePartner.jsx';
 import ListeAbonnement from './components/Admin/ListeAbonnement.jsx';
 import Inscription from './components/Admin/Inscription.jsx';
 import ValeurPost from './components/Admin/ValeurPost.jsx';
-import FondationPost from './components/Admin/FondationPost.jsx';
+import Entreprise from './components/Admin/Entreprise.jsx';
 import MotPresidentPost from './components/Admin/MotPresidentPost.jsx';
 import VideoPost from './components/Admin/VideoPost.jsx';
 import ListeApprenants from './components/Admin/ListeApprenants.jsx';
@@ -79,6 +78,7 @@ import ServicePost from './components/Admin/ServicePost.jsx';
 import ThonProductPost from './components/Admin/ThonProductPost.jsx';
 import AddUser from './components/Admin/AddUser.jsx';
 import SuiviEvaluation from './components/Admin/SuiviEvaluation.jsx';
+
 
 // ✅ Router
 const router = createBrowserRouter(
@@ -110,7 +110,6 @@ const router = createBrowserRouter(
       <Route path="videotheque" element={<Videotheque />} />
       <Route path="phototheque" element={<Phototheque />} />
       <Route path="document" element={<Document />} />
-      <Route path="entreprise " element={<Entreprise  />} />
       <Route path="actualites" element={<Actualites />} />
       <Route path="nousRejoindreHeader" element={<NousRejoindreHeader />} />
       <Route path="activities" element={<Activities />} />
@@ -132,7 +131,7 @@ const router = createBrowserRouter(
         <Route path="listeAbonnement" element={<ListeAbonnement />} />
         <Route path="inscription" element={<Inscription />} />
         <Route path="valeurPost" element={<ValeurPost />} />
-        <Route path="fondationPost" element={<FondationPost />} />
+        <Route path="entreprise" element={<Entreprise />} />
         <Route path="motPresidentPost" element={<MotPresidentPost />} />
         <Route path="videoPost" element={<VideoPost />} />
         <Route path="listeApprenants" element={<ListeApprenants />} />
@@ -147,7 +146,7 @@ const router = createBrowserRouter(
         <Route path="servicePost" element={<ServicePost />} />
         <Route path="thonProductPost" element={<ThonProductPost />} />
         <Route path="addUser" element={<AddUser />} />
-         <Route path="suiviEvaluation" element={<SuiviEvaluation />} />
+        <Route path="suiviEvaluation" element={<SuiviEvaluation />} />
       </Route>
 
     </Route>

@@ -24,6 +24,8 @@ const CONFIG = {
   API_EVALUATIONS:  "/api/evaluations/",
   API_FORMATIONS:   "/api/formations/",
   API_CANDIDATS:    "/api/candidats/",
+  API_ENTREPRISE_FORMATIONS: "/api/entreprise-formations/",
+  API_MODULES_FORMATION:     "/api/modules-formation/",
 
   // ── Rapports & exports ───────────────────────────────────
   API_RESULTS: (sessionId) =>

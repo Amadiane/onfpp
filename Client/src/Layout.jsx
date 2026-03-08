@@ -28,14 +28,14 @@ const adminPaths = [
   "/listePostulantsCommunity", "/listPartners",
   "/listeAbonnement", "/valeurPost",
   "/dashboardAdmin", "/teamMessage", "/formation",
-  "/activitiesPost", "/entreprise ", "/partnerPost",
-  "/servicePost", "/portfolioPost", "/addUser",
+  "/activitiesPost", "/partnerPost",
+  "/servicePost", "/entreprise", "/addUser",
   /* routes du nouveau NavAdmin */
   "/formations", "/sessions", "/suiviEvaluation","/programmes", "/certifications",
   "/inscription", "/apprenants", "/listeCandidats", "/validation",
   "/suivi", "/presences", "/evaluations", "/discipline",
   "/resultats", "/attestations", "/enquete-insertion", "/relances",
-  "/entreprises", "/offres-emploi", "/statistiques",
+  "/offres-emploi", "/statistiques",
   "/dashboardRegional", "/rapports", "/centresFormation",
   "/teamMessage", "/listeApprenants", "/utilisateurs", "/parametres",
 

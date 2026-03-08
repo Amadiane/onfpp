@@ -306,17 +306,6 @@ const FTextarea = ({ label, name, value, onChange, placeholder, rows = 3 }) => (
 /* ═══════════════════════════════════════════════════════════════════
    MODAL FORMULAIRE — CRÉATION / ÉDITION
 ═══════════════════════════════════════════════════════════════════ */
-const EMPTY_FORM = {
-  nom_entreprise: "", secteur_activite: "", adresse_entreprise: "",
-  contact_rh: "", telephone_entreprise: "", email_entreprise: "",
-  intitule_formation: "", objectifs: "",
-  antenne: "", nb_hommes: 0, nb_femmes: 0,
-  date_debut_prevue: "", date_fin_prevue: "",
-  statut_realisation: "planifiee",
-  plan_formation_url: "", plan_formation_nom: "",
-  nb_formes_hommes: 0, nb_formes_femmes: 0, rapport_final: "",
-};
-
 const EntrepriseFormModal = ({ item, onClose, onSaved }) => {
   const isEdit = Boolean(item?.id);
   const [form, setForm]     = useState(isEdit ? {
@@ -333,21 +322,49 @@ const EntrepriseFormModal = ({ item, onClose, onSaved }) => {
     nb_femmes:             item.nb_femmes             ?? 0,
     date_debut_prevue:     item.date_debut_prevue     || "",
     date_fin_prevue:       item.date_fin_prevue       || "",
+    date_realisation:      item.date_realisation      || "",
     statut_realisation:    item.statut_realisation    || "planifiee",
-    plan_formation_url:    item.plan_formation_url    || "",
-    plan_formation_nom:    item.plan_formation_nom    || "",
     nb_formes_hommes:      item.nb_formes_hommes      ?? 0,
     nb_formes_femmes:      item.nb_formes_femmes      ?? 0,
     rapport_final:         item.rapport_final         || "",
-  } : { ...EMPTY_FORM });
-  const [errors, setErrors]   = useState({});
-  const [loading, setLoading] = useState(false);
+  } : {
+    nom_entreprise: "", secteur_activite: "", adresse_entreprise: "",
+    contact_rh: "", telephone_entreprise: "", email_entreprise: "",
+    intitule_formation: "", objectifs: "", antenne: "",
+    nb_hommes: 0, nb_femmes: 0,
+    date_debut_prevue: "", date_fin_prevue: "", date_realisation: "",
+    statut_realisation: "planifiee",
+    nb_formes_hommes: 0, nb_formes_femmes: 0, rapport_final: "",
+  });
+  const [errors,   setErrors]   = useState({});
+  const [loading,  setLoading]  = useState(false);
+  const [fichier,  setFichier]  = useState(null);   // File object sélectionné
+  const [fichierNom, setFichierNom] = useState(isEdit ? (item.plan_formation_nom || "") : "");
+  const [fichierURL, setFichierURL] = useState(isEdit ? (item.plan_formation_url || "") : "");
 
   const handleChange = useCallback((e) => {
     const { name, value } = e.target;
     setForm((p) => ({ ...p, [name]: value }));
     setErrors((p) => ({ ...p, [name]: undefined }));
   }, []);
+
+  const handleFileChange = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFichier(f);
+    setFichierNom(f.name);
+    setFichierURL("");
+  };
+
+  const handleRemoveFichier = () => {
+    setFichier(null);
+    setFichierNom("");
+    setFichierURL("");
+  };
+
+  const totalPrevus = (Number(form.nb_hommes) || 0) + (Number(form.nb_femmes) || 0);
+  const totalFormes = (Number(form.nb_formes_hommes) || 0) + (Number(form.nb_formes_femmes) || 0);
+  const tauxForm    = totalPrevus > 0 ? Math.round((totalFormes / totalPrevus) * 100) : 0;
 
   const validate = () => {
     const e = {};
@@ -361,25 +378,49 @@ const EntrepriseFormModal = ({ item, onClose, onSaved }) => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     setLoading(true);
-    const payload = {
-      ...form,
-      nb_hommes:        Number(form.nb_hommes)        || 0,
-      nb_femmes:        Number(form.nb_femmes)        || 0,
-      nb_formes_hommes: Number(form.nb_formes_hommes) || 0,
-      nb_formes_femmes: Number(form.nb_formes_femmes) || 0,
-      date_debut_prevue:  form.date_debut_prevue  || null,
-      date_fin_prevue:    form.date_fin_prevue    || null,
-      plan_formation_url: form.plan_formation_url || null,
-      plan_formation_nom: form.plan_formation_nom || null,
-      rapport_final:      form.rapport_final      || null,
-      objectifs:          form.objectifs          || null,
-    };
     try {
       let res;
-      if (isEdit) {
-        res = await axios.patch(`${API_BASE}${item.id}/`, payload, { headers: authHeader() });
+      const token = localStorage.getItem("access") || localStorage.getItem("access_token") || localStorage.getItem("token");
+      if (fichier) {
+        // Upload avec fichier → FormData (multipart)
+        const fd = new FormData();
+        Object.entries(form).forEach(([k, v]) => {
+          if (v !== "" && v !== null && v !== undefined) fd.append(k, v);
+        });
+        fd.set("nb_hommes",        Number(form.nb_hommes)        || 0);
+        fd.set("nb_femmes",        Number(form.nb_femmes)        || 0);
+        fd.set("nb_formes_hommes", Number(form.nb_formes_hommes) || 0);
+        fd.set("nb_formes_femmes", Number(form.nb_formes_femmes) || 0);
+        fd.append("plan_formation_fichier", fichier);
+        fd.set("plan_formation_nom", fichier.name);
+        const hdrs = token ? { Authorization: `Bearer ${token}` } : {};
+        if (isEdit) {
+          res = await axios.patch(`${API_BASE}${item.id}/`, fd, { headers: hdrs });
+        } else {
+          res = await axios.post(API_BASE, fd, { headers: hdrs });
+        }
       } else {
-        res = await axios.post(API_BASE, payload, { headers: authHeader() });
+        // Pas de fichier → JSON normal
+        const payload = {
+          ...form,
+          nb_hommes:        Number(form.nb_hommes)        || 0,
+          nb_femmes:        Number(form.nb_femmes)        || 0,
+          nb_formes_hommes: Number(form.nb_formes_hommes) || 0,
+          nb_formes_femmes: Number(form.nb_formes_femmes) || 0,
+          date_debut_prevue:  form.date_debut_prevue  || null,
+          date_fin_prevue:    form.date_fin_prevue    || null,
+          date_realisation:   form.date_realisation   || null,
+          plan_formation_nom: fichierNom || null,
+          plan_formation_url: fichierURL || null,
+          rapport_final:      form.rapport_final      || null,
+          objectifs:          form.objectifs          || null,
+        };
+        const hdrs = { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+        if (isEdit) {
+          res = await axios.patch(`${API_BASE}${item.id}/`, payload, { headers: hdrs });
+        } else {
+          res = await axios.post(API_BASE, payload, { headers: hdrs });
+        }
       }
       onSaved(res.data, isEdit ? "edit" : "create");
     } catch (err) {
@@ -461,17 +502,70 @@ const EntrepriseFormModal = ({ item, onClose, onSaved }) => {
               <FInput label="Hommes formés" name="nb_formes_hommes" type="number" value={form.nb_formes_hommes} onChange={handleChange} placeholder="0" />
               <FInput label="Femmes formées" name="nb_formes_femmes" type="number" value={form.nb_formes_femmes} onChange={handleChange} placeholder="0" />
             </div>
+            {/* Aperçu taux en temps réel */}
+            {totalPrevus > 0 && (
+              <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 10, background: "#fff", border: `1px solid ${C.divider}`, display: "flex", alignItems: "center", gap: 14 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ fontSize: 11, color: C.textMuted, fontWeight: 700 }}>Taux de réalisation</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: tauxForm >= 80 ? C.green : tauxForm >= 50 ? C.gold : C.danger }}>{tauxForm}%</span>
+                  </div>
+                  <div style={{ height: 6, borderRadius: 3, background: C.surfaceEl, overflow: "hidden" }}>
+                    <div style={{ width: `${tauxForm}%`, height: "100%", borderRadius: 3, background: tauxForm >= 80 ? C.green : tauxForm >= 50 ? C.gold : C.danger, transition: "width .4s ease" }} />
+                  </div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: C.teal }}>{totalFormes}</span>
+                  <span style={{ fontSize: 11, color: C.textMuted }}> / {totalPrevus} formés</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Plan & Statut */}
           <div style={{ background: C.surfaceEl, borderRadius: 14, padding: "18px 20px", border: `1px solid ${C.divider}` }}>
             <SecHdr icon={FileText} label="Plan de formation & Statut" color={C.gold} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-              <FSelect label="Statut de réalisation" name="statut_realisation" value={form.statut_realisation} onChange={handleChange}
-                options={STATUTS.map((s) => ({ v: s.v, l: s.l }))} />
-              <FInput label="Nom du fichier / document" name="plan_formation_nom" value={form.plan_formation_nom} onChange={handleChange} placeholder="Ex: Plan_Formation_2026.pdf" />
+              <div>
+                <label className="ent-label">Statut de réalisation</label>
+                <select className="ent-input" name="statut_realisation" value={form.statut_realisation} onChange={handleChange}>
+                  {STATUTS.map((s) => <option key={s.v} value={s.v}>{s.l}</option>)}
+                </select>
+                {form.statut_realisation && (() => { const st = getStatut(form.statut_realisation); const SI = st.icon; return (
+                  <div style={{ marginTop: 6, display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: 6, background: st.bg, border: `1px solid ${st.border}` }}>
+                    <SI size={10} color={st.color} /><span style={{ fontSize: 11, fontWeight: 700, color: st.color }}>{st.l}</span>
+                  </div>
+                ); })()}
+              </div>
+              <FInput label="Date de réalisation effective" name="date_realisation" type="date" value={form.date_realisation} onChange={handleChange} />
               <div style={{ gridColumn: "1/-1" }}>
-                <FInput label="Lien vers le plan de formation (URL)" name="plan_formation_url" type="url" value={form.plan_formation_url} onChange={handleChange} placeholder="https://drive.google.com/…" />
+                <label className="ent-label">Plan de formation (fichier)</label>
+                {(fichier || fichierNom) ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 16px", borderRadius: 10, background: `${C.gold}08`, border: `1.5px solid ${C.gold}30` }}>
+                    <FileText size={20} color={C.gold} style={{ flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: C.textPri, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fichierNom}</p>
+                      {fichier && <p style={{ fontSize: 11, color: C.textMuted }}>{(fichier.size / 1024).toFixed(1)} Ko — prêt à l'envoi</p>}
+                      {!fichier && fichierURL && <a href={fichierURL} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.blue }}>Ouvrir le fichier existant ↗</a>}
+                    </div>
+                    <button type="button" onClick={handleRemoveFichier} style={{ width: 28, height: 28, borderRadius: 7, background: `${C.danger}10`, border: `1px solid ${C.danger}20`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                      <X size={12} color={C.danger} />
+                    </button>
+                  </div>
+                ) : (
+                  <label htmlFor="ent-file-upload" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, padding: "22px 16px", borderRadius: 12, border: `2px dashed ${C.divider}`, background: "#fff", cursor: "pointer", transition: "all .15s" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.gold; e.currentTarget.style.background = `${C.gold}05`; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.divider; e.currentTarget.style.background = "#fff"; }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 12, background: C.goldPale, border: `1px solid ${C.gold}25`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Upload size={18} color={C.gold} />
+                    </div>
+                    <div style={{ textAlign: "center" }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: C.textPri }}>Cliquer pour joindre un fichier</p>
+                      <p style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>PDF, Word, Excel — depuis votre PC ou téléphone</p>
+                    </div>
+                    <input id="ent-file-upload" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" style={{ display: "none" }} onChange={handleFileChange} />
+                  </label>
+                )}
               </div>
             </div>
           </div>
@@ -644,12 +738,27 @@ const DeleteModal = ({ label, onClose, onConfirm, loading }) => (
 /* ═══════════════════════════════════════════════════════════════════
    MODAL DÉTAIL — vue complète avec onglets
 ═══════════════════════════════════════════════════════════════════ */
-const DetailModal = ({ item, onClose, onEdit, onNavigateEvaluation }) => {
+const DetailModal = ({ item: itemInit, onClose, onEdit, onNavigateEvaluation }) => {
+  const [item,      setItem]      = useState(itemInit);
+  const [loadItem,  setLoadItem]  = useState(true);
   const [activeTab, setActiveTab] = useState("info");
-  const [modules,   setModules]   = useState(item.modules || []);
+  const [modules,   setModules]   = useState([]);
   const [loadMod,   setLoadMod]   = useState(false);
   const [showModForm, setShowModForm] = useState(false);
   const [editModule,  setEditModule]  = useState(null);
+
+  // Charger le détail complet (tous les champs) dès l'ouverture
+  useEffect(() => {
+    const fetchDetail = async () => {
+      setLoadItem(true);
+      try {
+        const res = await axios.get(`${API_BASE}${itemInit.id}/`, { headers: authHeader() });
+        setItem(res.data);
+      } catch {}
+      finally { setLoadItem(false); }
+    };
+    fetchDetail();
+  }, [itemInit.id]);
 
   const reloadModules = async () => {
     setLoadMod(true);
@@ -752,7 +861,13 @@ const DetailModal = ({ item, onClose, onEdit, onNavigateEvaluation }) => {
 
           {/* Corps */}
           <div style={{ padding: "22px 28px", minHeight: 280 }}>
-            {activeTab === "info" && (
+            {loadItem && (
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "48px 0", gap: 10 }}>
+                <Loader2 size={20} color={C.blue} className="ent-spin" />
+                <span style={{ fontSize: 13, color: C.textMuted }}>Chargement des données…</span>
+              </div>
+            )}
+            {!loadItem && activeTab === "info" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 {/* Infos entreprise */}
                 <div style={{ background: C.surfaceEl, borderRadius: 14, padding: "4px 18px", border: `1px solid ${C.divider}` }}>
@@ -794,7 +909,7 @@ const DetailModal = ({ item, onClose, onEdit, onNavigateEvaluation }) => {
                   } />
                 </div>
                 {/* Plan de formation */}
-                {(item.plan_formation_url || item.plan_formation_nom) && (
+                {(item.plan_formation_fichier || item.plan_formation_url || item.plan_formation_nom) && (
                   <div style={{ background: `${C.gold}08`, borderRadius: 14, padding: "14px 18px", border: `1px solid ${C.gold}25`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <div style={{ width: 38, height: 38, borderRadius: 10, background: C.goldPale, border: `1px solid ${C.gold}30`, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -802,11 +917,11 @@ const DetailModal = ({ item, onClose, onEdit, onNavigateEvaluation }) => {
                       </div>
                       <div>
                         <p style={{ fontSize: 12.5, fontWeight: 700, color: C.textPri }}>{item.plan_formation_nom || "Plan de formation"}</p>
-                        <p style={{ fontSize: 11, color: C.textMuted }}>Document joint</p>
+                        <p style={{ fontSize: 11, color: C.textMuted }}>Document joint au plan</p>
                       </div>
                     </div>
-                    {item.plan_formation_url && (
-                      <a href={item.plan_formation_url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                    {(item.plan_formation_fichier || item.plan_formation_url) && (
+                      <a href={item.plan_formation_fichier || item.plan_formation_url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
                         <button className="ent-btn-sec" style={{ fontSize: 12 }}><ExternalLink size={12} /> Ouvrir</button>
                       </a>
                     )}
@@ -821,8 +936,7 @@ const DetailModal = ({ item, onClose, onEdit, onNavigateEvaluation }) => {
                 )}
               </div>
             )}
-
-            {activeTab === "modules" && (
+            {!loadItem && activeTab === "modules" && (
               <div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                   <p className="ent-serif" style={{ fontSize: 15, fontWeight: 700, color: C.textPri }}>
