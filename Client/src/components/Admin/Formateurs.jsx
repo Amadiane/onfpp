@@ -4,9 +4,10 @@ import CONFIG from "../../config/config.js";
 import {
   User, Users, Search, ChevronLeft, ChevronRight, RefreshCw, Loader2,
   MapPin, Plus, X, Eye, Pencil, Trash2, CheckCircle2, AlertTriangle,
-  Star, Building2, Phone, Mail, BookOpen, Briefcase, Award, Hash,
-  ToggleLeft, ToggleRight, ChevronDown, ExternalLink, FileText,
-  ClipboardList, UserCheck, Upload, Camera, Globe,
+  Star, Building2, Phone, Mail, BookOpen, Briefcase, Award,
+  ToggleLeft, ToggleRight, ExternalLink, FileText,
+  ClipboardList, UserCheck, Camera, Download,
+  GraduationCap, Repeat2,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -96,6 +97,16 @@ const ANTENNES = [
   {v:"siguiri",l:"Siguiri"},{v:"nzerekore",l:"N'Zérékoré"},
 ];
 const antenneLabel = (v) => ANTENNES.find((a) => a.v === v)?.l || v || "—";
+/* ═══════════════════════════════════════════════════════════════════
+   TYPES DE FORMATION ENSEIGNÉE
+   Un formateur peut intervenir en DFC, DAP, ou les deux
+═══════════════════════════════════════════════════════════════════ */
+const TYPES_FORMATION = [
+  { v:"continue",     l:"Formation Continue (DFC)", desc:"Salariés / adultes en activité", color:"#1635C8", bg:"#1635C808", icon:"🎓" },
+  { v:"apprentissage",l:"Formation par Apprentissage (DAP)", desc:"Alternance école/entreprise — jeunes", color:"#047A5A", bg:"#E8FBF5", icon:"🔧" },
+];
+
+
 
 /* ═══════════════════════════════════════════════════════════════════
    HELPERS
@@ -109,11 +120,117 @@ const authHeader = () => {
 
 const API_BASE = (CONFIG.BASE_URL || "") + "/api/formateurs/";
 
-/* Générer identifiant formateur */
+/*
+  ╔══════════════════════════════════════════════════════╗
+  ║  DÉCOMPOSITION DE L'IDENTIFIANT FORMATEUR           ║
+  ║  FORM - TYPE - ANTENNE - ANNÉE - N°                 ║
+  ║  Ex: FORM-IND-CKY-2026-0001                        ║
+  ║  • FORM  = Formateur (préfixe)                     ║
+  ║  • IND   = INDividuel  |  ORG = ORGanisme          ║
+  ║  • CKY   = code antenne (ex: Conakry)              ║
+  ║  • 2026  = année d'enregistrement                  ║
+  ║  • 0001  = numéro séquentiel auto                  ║
+  ╚══════════════════════════════════════════════════════╝
+*/
+const ANTENNE_CODES = {
+  conakry:"CKY",forecariah:"FRC",boke:"BOK",kindia:"KND",
+  labe:"LBE",mamou:"MMU",faranah:"FRN",kankan:"KNK",
+  siguiri:"SGR",nzerekore:"NZR",
+};
+
+/* Export Excel (CSV) */
+const exportExcel = (data) => {
+  const cols = ["Identifiant","Prénom","Nom","Type","Cabinet","Domaine","Spécialité","Types formation","Téléphone","Email","Adresse","Antenne","Expérience (ans)","Diplôme","Disponible","Note manuelle","Note évaluation"];
+  const rows = data.map((it, i) => {
+    const dom = getDomaine(it.domaine);
+    return [
+      it.identifiant_unique || buildFormateurId(it, i),
+      it.prenom, it.nom,
+      it.type === "organisme" ? "Organisme" : "Individuel",
+      it.nom_cabinet || "",
+      dom?.l || it.domaine_autre || it.domaine || "",
+      it.specialite || it.domaine_autre || "",
+      (it.types_formation || []).join(", "),
+      it.telephone, it.email || "", it.adresse || "",
+      antenneLabel(it.antenne),
+      it.experience_annees || "", it.diplome || "",
+      it.disponible ? "Oui" : "Non",
+      it.note_manuelle ?? "", it.note_evaluation ?? "",
+    ];
+  });
+  const BOM = "\uFEFF";
+  const csv = [cols, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g,'\'\'')}"`).join(";")).join("\n");
+  const blob = new Blob([BOM + csv], { type:"text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.download = `formateurs_onfpp_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+};
+
+/* Export PDF via impression navigateur */
+const exportPDF = (data) => {
+  const date = new Date().toLocaleDateString("fr-FR", { day:"2-digit", month:"long", year:"numeric" });
+  const rows = data.map((it, i) => {
+    const dom  = getDomaine(it.domaine);
+    const note = it.note_evaluation ?? it.note_manuelle;
+    const stars= note ? "★".repeat(Math.round(note)) + "☆".repeat(5-Math.round(note)) : "—";
+    const tf   = (it.types_formation||[]).map((v)=>v==="continue"?"DFC":"DAP").join("+") || "—";
+    const nc   = String(note??"-").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    return `<tr style="border-bottom:1px solid #E8EDFC;">
+      <td style="padding:8px 10px;font-family:monospace;font-size:10px;color:#1635C8;font-weight:700;">${it.identifiant_unique||buildFormateurId(it,i)}</td>
+      <td style="padding:8px 10px;font-weight:600;">${it.prenom} ${it.nom}</td>
+      <td style="padding:8px 10px;font-size:11px;">${it.type==="organisme"?`Org.`:"Indiv."}</td>
+      <td style="padding:8px 10px;font-size:11px;font-weight:700;color:#0E7490;">${tf}</td>
+      <td style="padding:8px 10px;font-size:11px;">${dom?.l||it.domaine_autre||it.domaine||"—"}</td>
+      <td style="padding:8px 10px;font-size:11px;">${it.telephone}</td>
+      <td style="padding:8px 10px;font-size:11px;">${antenneLabel(it.antenne)}</td>
+      <td style="padding:8px 10px;font-size:11px;text-align:center;color:${note>=4?"#047A5A":note>=3?"#D4920A":"#8497C8"};">${stars} ${nc}</td>
+      <td style="padding:8px 10px;text-align:center;">${it.disponible?"<span style='color:#047A5A;font-weight:700;'>✓</span>":"<span style='color:#C81B1B;'>✗</span>"}</td>
+    </tr>`;
+  }).join("");
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Formateurs — ONFPP</title>
+  <style>
+    body{font-family:Arial,sans-serif;color:#06102A;padding:24px 28px;}
+    @media print{body{padding:8px 12px;}}
+    h1{font-size:22px;font-weight:800;margin-bottom:4px;}
+    .sub{font-size:12px;color:#8497C8;margin-bottom:18px;}
+    .tri{height:4px;display:flex;border-radius:2px;overflow:hidden;width:56px;margin-bottom:10px;}
+    table{width:100%;border-collapse:collapse;font-size:12px;}
+    thead tr{background:#06102A;color:#fff;}
+    th{padding:9px 10px;text-align:left;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.1em;}
+    tbody tr:nth-child(even){background:#F4F7FF;}
+    .footer{margin-top:16px;font-size:10px;color:#8497C8;text-align:center;border-top:1px solid #E8EDFC;padding-top:10px;}
+    .stats{display:flex;gap:12px;margin-bottom:16px;}
+    .stat{padding:6px 14px;border-radius:20px;font-size:11px;font-weight:700;}
+  </style></head><body>
+  <div class="tri"><div style="flex:1;background:#E02020;"></div><div style="flex:1;background:#D4920A;"></div><div style="flex:1;background:#047A5A;"></div></div>
+  <h1>Répertoire des Formateurs — ONFPP Guinée</h1>
+  <p class="sub">Exporté le ${date} · ${data.length} formateur${data.length>1?"s":""}</p>
+  <div class="stats">
+    <span class="stat" style="background:#E8FBF5;color:#047A5A;">${data.filter(d=>d.disponible).length} disponibles</span>
+    <span class="stat" style="background:#F3EDFF;color:#6A24D4;">${data.filter(d=>d.type==="organisme").length} organismes</span>
+    <span class="stat" style="background:#1635C808;color:#1635C8;">${data.filter(d=>(d.types_formation||[]).includes("continue")).length} DFC</span>
+    <span class="stat" style="background:#E8FBF5;color:#047A5A;">${data.filter(d=>(d.types_formation||[]).includes("apprentissage")).length} DAP</span>
+  </div>
+  <table>
+    <thead><tr><th>Identifiant</th><th>Formateur</th><th>Type</th><th>Formation</th><th>Domaine</th><th>Téléphone</th><th>Antenne</th><th style="text-align:center;">Note</th><th style="text-align:center;">Dispo</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="footer">ONFPP Guinée · Document confidentiel · ${date}</div>
+  <script>window.onload=()=>{window.print();}<\/script>
+  </body></html>`;
+  const win = window.open("","_blank");
+  win.document.write(html);
+  win.document.close();
+};
+
+
+
 const buildFormateurId = (f, idx) => {
   const div = f.type === "organisme" ? "ORG" : "IND";
+  const ant = ANTENNE_CODES[f.antenne] || "GN";
   const year = new Date().getFullYear();
-  return `FORM-${div}-${year}-${String((idx || 0) + 1).padStart(4, "0")}`;
+  return `FORM-${div}-${ant}-${year}-${String((idx || 0) + 1).padStart(4, "0")}`;
 };
 
 /* Rendu étoiles */
@@ -345,17 +462,61 @@ const FmtAvatar = ({ nom, prenom, photo, size=42 }) => {
   );
 };
 
-/* Étoile note affichage */
-const NoteStars = ({ note }) => {
+/* Étoile note affichage avec source */
+const NoteStars = ({ note, source }) => {
   const n = Number(note) || 0;
   const color = n >= 4 ? C.green : n >= 3 ? C.gold : n >= 2 ? C.orange : C.textMuted;
   return (
-    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-      <Stars note={n} size={13}/>
-      {n > 0
-        ? <span style={{ fontSize:12, fontWeight:700, color }}>{n.toFixed(1)}</span>
-        : <span style={{ fontSize:11, color:C.textMuted }}>Non évalué</span>
-      }
+    <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+        <Stars note={n} size={12}/>
+        {n > 0
+          ? <span style={{ fontSize:12, fontWeight:700, color }}>{n.toFixed(1)}</span>
+          : <span style={{ fontSize:11, color:C.textMuted }}>—</span>
+        }
+      </div>
+      {n > 0 && (
+        <span style={{ fontSize:9.5, fontWeight:700, padding:"2px 7px", borderRadius:20,
+          background: source === "auto" ? `${C.blue}12` : `${C.gold}12`,
+          color: source === "auto" ? C.blue : C.gold,
+          border: `1px solid ${source==="auto" ? C.blue : C.gold}20` }}>
+          {source === "auto" ? "📊 SuiviÉval" : "✏️ Manuelle"}
+        </span>
+      )}
+    </div>
+  );
+};
+
+
+/* Tooltip décomposition ID formateur */
+const IdBadge = ({ fid }) => {
+  const parts = (fid || "").split("-");
+  // FORM - TYPE - ANTENNE - ANNÉE - N°
+  const descs = ["Préfixe", parts[1]==="IND"?"Individuel":"Organisme", "Antenne", "Année", "N° séquentiel"];
+  return (
+    <div style={{ position:"relative", display:"inline-block" }}
+      onMouseEnter={(e)=>{const t=e.currentTarget.querySelector(".fmt-idc");if(t)t.style.display="flex";}}
+      onMouseLeave={(e)=>{const t=e.currentTarget.querySelector(".fmt-idc");if(t)t.style.display="none";}}>
+      <span style={{ fontSize:10, fontWeight:800, color:C.violet, background:C.violetPale, padding:"4px 9px",
+        borderRadius:6, fontFamily:"monospace", border:`1px solid ${C.violet}20`, whiteSpace:"nowrap", cursor:"help" }}>
+        {fid}
+      </span>
+      <div className="fmt-idc" style={{ display:"none", position:"absolute", top:"calc(100% + 8px)", left:0, zIndex:200,
+        background:C.navy, color:"#fff", borderRadius:12, padding:"12px 14px",
+        fontFamily:"'Outfit',sans-serif", fontSize:11, minWidth:280,
+        boxShadow:"0 12px 32px rgba(6,16,42,.4)", flexDirection:"column", gap:6 }}>
+        <p style={{ fontWeight:800, fontSize:11, borderBottom:"1px solid rgba(255,255,255,.15)", paddingBottom:6, marginBottom:2 }}>
+          💡 Décomposition de l'identifiant
+        </p>
+        <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+          {parts.map((seg, i) => (
+            <div key={i} style={{ background:"rgba(255,255,255,.1)", borderRadius:8, padding:"5px 10px", textAlign:"center", minWidth:48 }}>
+              <p style={{ fontFamily:"monospace", fontWeight:800, fontSize:12 }}>{seg}</p>
+              <p style={{ fontSize:9, opacity:.65, marginTop:2 }}>{descs[i]||""}</p>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };
@@ -371,6 +532,8 @@ const EMPTY = {
   nom_cabinet:"", site_web:"",          // si organisme
   /* Domaine */
   domaine:"", specialite:"", domaine_autre:"",
+  /* Type de formation */
+  types_formation: [],
   /* Disponibilité */
   disponible: true,
   /* Note manuelle (si pas d'évaluation) */
@@ -402,6 +565,7 @@ const FormateurFormModal = ({ item, onClose, onSaved }) => {
     certifications:   item.certifications   || "",
     langues:          item.langues          || "",
     bio:              item.bio              || "",
+    types_formation:  item.types_formation  || [],
   } : { ...EMPTY });
 
   const [errors,  setErrors]  = useState({});
@@ -421,6 +585,17 @@ const FormateurFormModal = ({ item, onClose, onSaved }) => {
     setErrors((p) => ({ ...p, [name]: undefined }));
   }, []);
 
+  /* Toggle type de formation (multi-sélection) */
+  const toggleTypeFormation = (v) => {
+    setForm((p) => {
+      const arr = p.types_formation.includes(v)
+        ? p.types_formation.filter((x) => x !== v)
+        : [...p.types_formation, v];
+      return { ...p, types_formation: arr };
+    });
+    setErrors((p) => ({ ...p, types_formation: undefined }));
+  };
+
   const handlePhoto = (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -436,6 +611,7 @@ const FormateurFormModal = ({ item, onClose, onSaved }) => {
     if (!form.domaine)        e.domaine = "Requis";
     if (form.domaine === "autres" && !form.domaine_autre.trim()) e.domaine_autre = "Précisez le domaine";
     if (form.domaine && form.domaine !== "autres" && getDomaine(form.domaine)?.metiers.length > 0 && !form.specialite) e.specialite = "Requis";
+    if (form.types_formation.length === 0) e.types_formation = "Sélectionnez au moins un type de formation";
     if (form.type === "organisme" && !form.nom_cabinet.trim()) e.nom_cabinet = "Requis";
     return e;
   };
@@ -451,7 +627,8 @@ const FormateurFormModal = ({ item, onClose, onSaved }) => {
       if (photo) {
         const fd = new FormData();
         Object.entries(form).forEach(([k,v]) => {
-          if (v !== "" && v !== null && v !== undefined) fd.append(k, v);
+          if (k === "types_formation") { (v||[]).forEach((tf) => fd.append("types_formation", tf)); }
+          else if (v !== "" && v !== null && v !== undefined) fd.append(k, v);
         });
         fd.append("photo", photo);
         if (isEdit) res = await axios.patch(`${API_BASE}${item.id}/`, fd, { headers: hdrs });
@@ -569,6 +746,46 @@ const FormateurFormModal = ({ item, onClose, onSaved }) => {
                   <FInput label="Nom du cabinet / organisme de formation" required name="nom_cabinet" value={form.nom_cabinet} onChange={handleChange} error={errors.nom_cabinet} placeholder="Ex: Centre de Formation Professionnelle Alpha"/>
                 </div>
                 <FInput label="Site web" optional name="site_web" type="url" value={form.site_web} onChange={handleChange} placeholder="https://…"/>
+              </div>
+            )}
+          </div>
+
+
+          {/* ══ TYPE DE FORMATION ENSEIGNÉE ══ */}
+          <div className="fmt-section">
+            <SecHdr icon={GraduationCap} label="Type de formation enseignée" color="#0E7490"/>
+            <p style={{ fontSize:12, color:C.textMuted, marginBottom:12, lineHeight:1.6 }}>
+              Sélectionnez le(s) type(s) de formations que ce formateur peut dispenser. Un formateur peut couvrir les deux dispositifs.
+            </p>
+            <div style={{ display:"flex", gap:10 }}>
+              {TYPES_FORMATION.map((tf) => {
+                const sel = form.types_formation.includes(tf.v);
+                return (
+                  <button key={tf.v} type="button" onClick={() => toggleTypeFormation(tf.v)}
+                    style={{ flex:1, padding:"16px 18px", borderRadius:13, cursor:"pointer",
+                      border:`2px solid ${sel ? tf.color : C.divider}`,
+                      background:sel ? tf.bg : "#fff",
+                      display:"flex", alignItems:"center", gap:12, transition:"all .15s" }}>
+                    <span style={{ fontSize:26 }}>{tf.icon}</span>
+                    <div style={{ flex:1, textAlign:"left" }}>
+                      <p style={{ fontSize:13, fontWeight:700, color:sel ? tf.color : C.textPri }}>{tf.l}</p>
+                      <p style={{ fontSize:11, color:sel ? tf.color : C.textMuted, marginTop:2 }}>{tf.desc}</p>
+                    </div>
+                    <div style={{ width:20, height:20, borderRadius:6,
+                      border:`2px solid ${sel ? tf.color : C.divider}`,
+                      background:sel ? tf.color : "transparent",
+                      display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      {sel && <CheckCircle2 size={12} color="#fff"/>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            {errors.types_formation && (
+              <div style={{ marginTop:10, padding:"9px 14px", borderRadius:9, background:C.dangerPale,
+                border:`1px solid ${C.danger}25`, display:"flex", alignItems:"center", gap:7 }}>
+                <AlertTriangle size={13} color={C.danger}/>
+                <p style={{ fontSize:11, color:C.danger, margin:0, fontWeight:600 }}>{errors.types_formation}</p>
               </div>
             )}
           </div>
@@ -899,6 +1116,7 @@ const Formateurs = () => {
   const [filterDispo, setFilterDispo] = useState("tous");
   const [filterDom,   setFilterDom]   = useState("");
   const [filterType,  setFilterType]  = useState("tous");
+  const [filterTF,    setFilterTF]    = useState("tous"); // filtre DFC/DAP
   const [page,        setPage]        = useState(1);
   const [showForm,    setShowForm]    = useState(false);
   const [editItem,    setEditItem]    = useState(null);
@@ -959,7 +1177,8 @@ const Formateurs = () => {
     const md = filterDispo==="tous" || (filterDispo==="dispo"?it.disponible:!it.disponible);
     const mdom = !filterDom || it.domaine === filterDom;
     const mtype = filterType==="tous" || it.type === filterType;
-    return ms && md && mdom && mtype;
+    const mtf   = filterTF==="tous" || (it.types_formation||[]).includes(filterTF);
+    return ms && md && mdom && mtype && mtf;
   });
 
   /* ── Tri ── */
@@ -987,6 +1206,8 @@ const Formateurs = () => {
     organismes:items.filter((it) => it.type==="organisme").length,
     individ:   items.filter((it) => it.type==="individuel").length,
     evalues:   items.filter((it) => (it.note_evaluation||it.note_manuelle||0) > 0).length,
+    dfc:       items.filter((it) => (it.types_formation||[]).includes("continue")).length,
+    dap:       items.filter((it) => (it.types_formation||[]).includes("apprentissage")).length,
     moy:       (() => {
       const notes = items.map((it) => it.note_evaluation||it.note_manuelle||0).filter((n) => n > 0);
       return notes.length > 0 ? (notes.reduce((a,b) => a+b,0) / notes.length).toFixed(1) : null;
@@ -1028,6 +1249,22 @@ const Formateurs = () => {
               </div>
               <div style={{ display:"flex", gap:9 }}>
                 <button className="fmt-btn-sec" onClick={fetchAll}><RefreshCw size={13}/></button>
+                <button className="fmt-btn-sec"
+                  title="Exporter CSV (Excel)"
+                  onClick={() => exportExcel(sorted)}
+                  style={{ color:C.green, borderColor:`${C.green}30`, background:`${C.green}06` }}
+                  onMouseEnter={(e)=>{e.currentTarget.style.background=C.green;e.currentTarget.style.color="#fff";}}
+                  onMouseLeave={(e)=>{e.currentTarget.style.background=`${C.green}06`;e.currentTarget.style.color=C.green;}}>
+                  <Download size={13}/> Excel
+                </button>
+                <button className="fmt-btn-sec"
+                  title="Exporter PDF"
+                  onClick={() => exportPDF(sorted)}
+                  style={{ color:C.danger, borderColor:`${C.danger}30`, background:`${C.danger}06` }}
+                  onMouseEnter={(e)=>{e.currentTarget.style.background=C.danger;e.currentTarget.style.color="#fff";}}
+                  onMouseLeave={(e)=>{e.currentTarget.style.background=`${C.danger}06`;e.currentTarget.style.color=C.danger;}}>
+                  <FileText size={13}/> PDF
+                </button>
                 <button className="fmt-btn-pri" onClick={() => { setEditItem(null); setShowForm(true); }}>
                   <Plus size={14}/> Nouveau formateur
                 </button>
@@ -1042,6 +1279,8 @@ const Formateurs = () => {
               { label:"Disponibles",       value:stats.dispos,    color:C.green,  bg:C.greenPale,   icon:UserCheck   },
               { label:"Organismes",        value:stats.organismes,color:C.violet, bg:C.violetPale,  icon:Building2   },
               { label:"Individuels",       value:stats.individ,   color:C.teal,   bg:C.tealPale,    icon:User        },
+              { label:"DFC",              value:stats.dfc,       color:C.blue,   bg:`${C.blue}08`,  icon:GraduationCap },
+              { label:"DAP",              value:stats.dap,       color:C.green,  bg:C.greenPale,    icon:Repeat2    },
               { label:"Note moyenne",      value:stats.moy?`${stats.moy}★`:"—", color:C.gold, bg:C.goldPale, icon:Star },
             ].map((s, i) => {
               const SI = s.icon;
@@ -1093,6 +1332,16 @@ const Formateurs = () => {
               {DOMAINES.map((d) => <option key={d.v} value={d.v}>{d.l}</option>)}
             </select>
 
+            {/* Filtre DFC / DAP */}
+            <div style={{ display:"flex", gap:5 }}>
+              {[{v:"tous",l:"Tous"},{v:"continue",l:"🎓 DFC"},{v:"apprentissage",l:"🔧 DAP"}].map((f) => (
+                <button key={f.v} className="fmt-pill" onClick={() => { setFilterTF(f.v); setPage(1); }}
+                  style={{ border:filterTF===f.v?`1.5px solid ${C.teal}`:`1px solid ${C.divider}`, background:filterTF===f.v?C.tealPale:C.surfaceEl, color:filterTF===f.v?C.teal:C.textMuted }}>
+                  {f.l}
+                </button>
+              ))}
+            </div>
+
             <p style={{ fontSize:12, color:C.textMuted, flexShrink:0 }}>
               <span style={{ fontWeight:700, color:C.textSub }}>{sorted.length}</span> formateur{sorted.length>1?"s":""}
             </p>
@@ -1130,6 +1379,7 @@ const Formateurs = () => {
                         <SortTh col="identifiant" label="ID"/>
                         <SortTh col="nom"         label="Formateur"/>
                         <SortTh col="type"        label="Type"/>
+                        <th style={{ padding:"13px 16px", fontSize:10, fontWeight:800, color:C.textMuted, letterSpacing:".12em", textTransform:"uppercase", whiteSpace:"nowrap" }}>Formation</th>
                         <SortTh col="domaine"     label="Domaine / Spécialité"/>
                         <th className="fmt-hide-sm" style={{ padding:"13px 16px", textAlign:"left", fontSize:10, fontWeight:800, color:C.textMuted, letterSpacing:".12em", textTransform:"uppercase" }}>Contact</th>
                         <th className="fmt-hide-sm" style={{ padding:"13px 16px", textAlign:"left", fontSize:10, fontWeight:800, color:C.textMuted, letterSpacing:".12em", textTransform:"uppercase" }}>Antenne</th>
@@ -1150,11 +1400,7 @@ const Formateurs = () => {
                             onClick={() => setDetailItem({ item:it, id:fid })}>
 
                             {/* ID */}
-                            <td style={{ padding:"13px 16px" }}>
-                              <span style={{ fontSize:10, fontWeight:800, color:C.violet, background:C.violetPale, padding:"4px 9px", borderRadius:6, fontFamily:"monospace", border:`1px solid ${C.violet}20`, whiteSpace:"nowrap" }}>
-                                {fid}
-                              </span>
-                            </td>
+                            <td style={{ padding:"13px 16px" }}><IdBadge fid={fid}/></td>
 
                             {/* Formateur */}
                             <td style={{ padding:"13px 16px" }}>
@@ -1175,6 +1421,21 @@ const Formateurs = () => {
                                 {it.type==="organisme"?<Building2 size={9}/>:<User size={9}/>}
                                 {it.type==="organisme"?"Organisme":"Individuel"}
                               </span>
+                            </td>
+
+                            {/* Types formation badges */}
+                            <td style={{ padding:"13px 16px" }}>
+                              <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                                {(it.types_formation||[]).map((v) => {
+                                  const tf = TYPES_FORMATION.find((t) => t.v === v);
+                                  return tf ? (
+                                    <span key={v} style={{ fontSize:10, fontWeight:700, padding:"3px 8px", borderRadius:20, background:tf.bg, color:tf.color, border:`1px solid ${tf.color}25` }}>
+                                      {tf.icon} {v==="continue"?"DFC":"DAP"}
+                                    </span>
+                                  ) : null;
+                                })}
+                                {(!it.types_formation||it.types_formation.length===0) && <span style={{ fontSize:11, color:C.textMuted }}>—</span>}
+                              </div>
                             </td>
 
                             {/* Domaine / Spécialité */}
@@ -1219,7 +1480,7 @@ const Formateurs = () => {
 
                             {/* Note */}
                             <td style={{ padding:"13px 16px" }}>
-                              <NoteStars note={note}/>
+                              <NoteStars note={note} source={it.note_evaluation?"auto":"manuelle"}/>
                             </td>
 
                             {/* Disponibilité */}

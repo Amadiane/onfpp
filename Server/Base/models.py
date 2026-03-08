@@ -814,6 +814,26 @@ class ModulePlanFormation(models.Model):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
@@ -884,6 +904,12 @@ class Formateur(models.Model):
     certifications      = models.CharField(max_length=300, blank=True, null=True)
     langues             = models.CharField(max_length=150, blank=True, null=True)
     bio                 = models.TextField(blank=True, null=True)
+
+    # ── Types de formation enseignée ──────────────────────────────────
+    #  Stocké en JSON : ["continue"], ["apprentissage"] ou les deux
+    types_formation    = models.JSONField(
+                            default=list,
+                            help_text="Liste: 'continue' (DFC) et/ou 'apprentissage' (DAP)")
 
     # ── Disponibilité ─────────────────────────────────────────────────
     disponible          = models.BooleanField(default=True)

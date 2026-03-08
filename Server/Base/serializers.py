@@ -776,7 +776,7 @@ class FormateurSerializer(serializers.ModelSerializer):
     antenne_display  = serializers.SerializerMethodField(read_only=True)
     type_display     = serializers.SerializerMethodField(read_only=True)
     domaine_display  = serializers.SerializerMethodField(read_only=True)
-    note_finale = serializers.FloatField(read_only=True)
+    note_finale      = serializers.FloatField(read_only=True)
     created_by_nom   = serializers.SerializerMethodField(read_only=True)
     photo_url        = serializers.SerializerMethodField(read_only=True)
 
@@ -793,7 +793,7 @@ class FormateurSerializer(serializers.ModelSerializer):
             # Domaine
             "domaine", "domaine_display", "specialite", "domaine_autre",
             # Compétences
-            "experience_annees", "diplome", "certifications", "langues", "bio",
+            "experience_annees", "diplome", "certifications", "langues", "bio", "types_formation",
             # Disponibilité
             "disponible",
             # Évaluation
