@@ -98,6 +98,7 @@ const buildNavCategories = (role, counts = {}) => {
       { path:"/entreprise",   label:"Base des entreprises", icon:Briefcase, roles:["DG","CD","DR"] },
       { path:"/formationContinue", label:"Formation DFC",      icon:Package,   roles:["DG","CD","DR"] },
       { path:"/formateurs", label:"Formateurs",      icon:Package,   roles:["DG","CD","DR"] },
+      { path:"/formationDAPc", label:"Formation DAPC",      icon:Package,   roles:["DG","CD","DR"] },
     ]},
     // { title:"Rapports", color:C.purple, icon:BarChart3, roles:["DG","CD","DR","CC"], items:[
     //   { path:"/statistiques",      label:"Statistiques globales",   icon:PieChart,  roles:["DG","CD"] },

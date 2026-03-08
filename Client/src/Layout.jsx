@@ -31,7 +31,7 @@ const adminPaths = [
   "/activitiesPost", "/formateurs",
   "/servicePost", "/entreprise", "/addUser",
   /* routes du nouveau NavAdmin */
-  "/formations", "/sessions", "/suiviEvaluation","/programmes", "/certifications",
+  "/formations", "/sessions", "/suiviEvaluation","/formationDAPc", "/certifications",
   "/inscription", "/apprenants", "/listeCandidats", "/validation",
   "/suivi", "/presences", "/evaluations", "/discipline",
   "/resultats", "/attestations", "/enquete-insertion", "/relances",

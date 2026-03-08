@@ -80,6 +80,7 @@ import AddUser from './components/Admin/AddUser.jsx';
 import SuiviEvaluation from './components/Admin/SuiviEvaluation.jsx';
 import Formateurs from './components/Admin/Formateurs.jsx';
 import FormationContinue from './components/Admin/FormationContinue.jsx';
+import FormationDAPc from './components/Admin/FormationDAPC.jsx';
 
 
 
@@ -152,6 +153,7 @@ const router = createBrowserRouter(
         <Route path="suiviEvaluation" element={<SuiviEvaluation />} />
         <Route path="formateurs" element={<Formateurs />} />
         <Route path="formationContinue" element={<FormationContinue />} />
+        <Route path="formationDAPc" element={<FormationDAPc />} />
       </Route>
 
     </Route>
