@@ -37,7 +37,7 @@ const adminPaths = [
   "/resultats", "/attestations", "/enquete-insertion", "/relances",
   "/entreprises", "/offres-emploi", "/statistiques",
   "/dashboardRegional", "/rapports", "/centresFormation",
-  "/teamMessage", "/partnerPost", "/utilisateurs", "/parametres",
+  "/teamMessage", "/listeApprenants", "/utilisateurs", "/parametres",
 
 ];
 

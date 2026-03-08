@@ -74,7 +74,7 @@ const buildNavCategories = (role, counts = {}) => {
     { title:"Apprenants", color:"#0369A1", icon:GraduationCap, roles:["DG","CD","DR","CC","FORMATEUR"], items:[
       { path:"/inscription",    label:"Inscriptions",          icon:GraduationCap, roles:["DG","CD","DR","CC","FORMATEUR"] },
       { path:"/formation",     label:"Formation",     icon:GraduationCap, roles:["DG","CD","DR","CC","FORMATEUR"] },
-      { path:"/suivi",          label:"Suivi pédagogique",     icon:ClipboardList, roles:["DG","CD","DR","CC","FORMATEUR"] },
+      { path:"/listeApprenants",          label:"Liste Apprenants",     icon:ClipboardList, roles:["DG","CD","DR","CC","FORMATEUR"] },
       
     ]},
     { title:"Présences & Notes", color:C.success, icon:ClipboardList, roles:["CC","FORMATEUR"], items:[
