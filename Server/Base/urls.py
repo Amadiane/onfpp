@@ -1,7 +1,7 @@
 # urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import CustomLoginView, UserCreateView, MeView, RoleViewSet, RegionViewSet, CentreViewSet, UserListView, CandidatViewSet, FormationViewSet, EntrepriseFormationViewSet, ModulePlanFormationViewSet, FormateurViewSet
+from .views import CustomLoginView, UserCreateView, MeView, RoleViewSet, RegionViewSet, CentreViewSet, UserListView, CandidatViewSet, FormationViewSet, EntrepriseFormationViewSet, ModulePlanFormationViewSet, FormateurViewSet, ConstantsView, UserDetailView
 from .views import (
     EvaluationSessionViewSet,
     CritereViewSet,
@@ -32,5 +32,7 @@ urlpatterns = [
     path("me/", MeView.as_view(), name="me"),
     path("users/create/", UserCreateView.as_view(), name="user-create"),
     path("users/",        UserListView.as_view(),      name="user-list"),   # ← NOUVEAU
+    path("users/<int:pk>/", UserDetailView.as_view(), name="user-detail"), 
+    path("constants/", ConstantsView.as_view(), name="constants"),  
     path("", include(router.urls)),
 ]

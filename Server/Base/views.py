@@ -7,20 +7,15 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .models import User, Role, Region, Centre
+from .models import User, Role, Region, Centre, Page, UserPageAccess
 from .serializers import (
     UserCreateSerializer, CustomTokenObtainPairSerializer,
-    RoleSerializer, RegionSerializer, CentreSerializer,
+    RoleSerializer, RegionSerializer, CentreSerializer, PageSerializer, UserPageAccessSerializer,  # ← AJOUTER
+    BulkSetAccessSerializer,  # ← AJOUTER
+    UserAccessSummarySerializer,
 )
 
 
-# ── Login JWT ────────────────────────────────────────────────
-# class CustomLoginView(TokenObtainPairView):
-#     serializer_class = CustomTokenObtainPairSerializer
-
-#     def post(self, request, *args, **kwargs):
-#         print("LOGIN DATA:", request.data)
-#         return super().post(request, *args, **kwargs)
 
 
 # # ── Utilisateur connecté ─────────────────────────────────────
@@ -47,7 +42,7 @@ from .serializers import (
 # correctement OU le token n'est pas lu par Django.
 # Solution : utiliser IsAuthenticated + SimpleJWT correctement.
 
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, action, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
@@ -127,10 +122,15 @@ def me_view(request):
     })
 
 
-# ── Créer un utilisateur ─────────────────────────────────────
+# ────────────────────────────────────────────────────────────
+#  USERS
+# ────────────────────────────────────────────────────────────
 class UserCreateView(generics.CreateAPIView):
     serializer_class   = UserCreateSerializer
-    permission_classes = [AllowAny]   # ← remplacez par IsAuthenticated en prod
+    permission_classes = [IsAuthenticated]   # en prod : IsAdminOrDG
+
+    def perform_create(self, serializer):
+        serializer.save()
 
 
 # ── Roles / Régions / Centres (lecture seule) ────────────────
@@ -152,6 +152,166 @@ class CentreViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
 
 
+# ────────────────────────────────────────────────────────────
+#  PAGES (admin)
+# ────────────────────────────────────────────────────────────
+class PageViewSet(viewsets.ModelViewSet):
+    """
+    CRUD complet sur les pages de la plateforme.
+    Accessible uniquement aux DG / DGA / admins.
+    """
+    queryset = Page.objects.all().order_by("label")
+    serializer_class   = PageSerializer
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=True, methods=["patch"], url_path="toggle")
+    def toggle(self, request, pk=None):
+        """Active ou désactive globalement une page."""
+        page          = self.get_object()
+        page.is_active = not page.is_active
+        page.save()
+        return Response({"key": page.key, "is_active": page.is_active})
+
+# ────────────────────────────────────────────────────────────
+#  USER PAGE ACCESS (admin individuel)
+# ────────────────────────────────────────────────────────────
+class UserPageAccessViewSet(viewsets.ModelViewSet):
+    """
+    Permet à un admin de gérer les accès individuels par page.
+    GET    /api/page-access/                    → liste complète
+    GET    /api/page-access/?user=<id>          → filtré par utilisateur
+    POST   /api/page-access/                    → créer/modifier un accès
+    PATCH  /api/page-access/<id>/               → modifier un accès
+    DELETE /api/page-access/<id>/               → supprimer un accès
+    POST   /api/page-access/bulk_set/           → set multiple accès d'un coup
+    """
+    queryset           = UserPageAccess.objects.select_related("user", "page").all()
+    serializer_class   = UserPageAccessSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs      = super().get_queryset()
+        user_id = self.request.query_params.get("user")
+        if user_id:
+            qs = qs.filter(user_id=user_id)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(updated_by=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
+
+    @action(detail=False, methods=["post"], url_path="bulk-set")
+    def bulk_set(self, request):
+        """
+        Body: { user_id: int, accesses: [{page_id: int, is_allowed: bool, note: str}] }
+        Crée ou met à jour en masse les accès d'un utilisateur.
+        """
+        user_id  = request.data.get("user_id")
+        accesses = request.data.get("accesses", [])
+
+        if not user_id:
+            return Response({"detail": "user_id requis."}, status=400)
+
+        user = get_object_or_404(User, pk=user_id)
+        results = []
+        for item in accesses:
+            page_id    = item.get("page_id")
+            is_allowed = item.get("is_allowed", True)
+            note       = item.get("note", "")
+            if not page_id:
+                continue
+            page = get_object_or_404(Page, pk=page_id)
+            obj, created = UserPageAccess.objects.update_or_create(
+                user=user, page=page,
+                defaults={"is_allowed": is_allowed, "note": note,
+                          "updated_by": request.user}
+            )
+            results.append(UserPageAccessSerializer(obj).data)
+
+        return Response({"updated": len(results), "accesses": results})
+
+    @action(detail=False, methods=["get"], url_path="user-summary")
+    def user_summary(self, request):
+        """
+        GET /api/page-access/user-summary/?user=<id>
+        Retourne toutes les pages avec leur statut d'accès pour un utilisateur.
+        """
+        user_id = request.query_params.get("user")
+        if not user_id:
+            return Response({"detail": "user_id requis."}, status=400)
+
+        user       = get_object_or_404(User, pk=user_id)
+        all_pages  = Page.objects.all()
+        overrides  = {
+            upa.page_id: upa
+            for upa in UserPageAccess.objects.filter(user=user)
+        }
+        result = []
+        for page in all_pages:
+            override = overrides.get(page.id)
+            result.append({
+                "page_id":          page.id,
+                "page_key":         page.key,
+                "page_label":       page.label,
+                "page_description": page.description,
+                "page_active":      page.is_active,
+                "niveau_min":       page.niveau_min,
+                "divisions":        page.divisions,
+                "override_id":      override.id if override else None,
+                "is_allowed":       override.is_allowed if override else None,
+                "note":             override.note if override else "",
+                # Accès effectif calculé
+                "effective":        _compute_access(user, page, override),
+            })
+
+        return Response({"user": user.username, "pages": result})
+
+
+def _compute_access(user, page, override):
+    """Calcule si un utilisateur a accès à une page."""
+    if not page.is_active:
+        return False
+    if override is not None:
+        return override.is_allowed
+    if user.niveau < page.niveau_min:
+        return False
+    if page.divisions:
+        allowed_divs = [d.strip() for d in page.divisions.split(",")]
+        if user.division not in allowed_divs and user.niveau < 90:
+            return False
+    return True
+
+
+# ────────────────────────────────────────────────────────────
+#  CONSTANTES FRONTEND
+# ────────────────────────────────────────────────────────────
+# À LA FIN de ton views.py
+
+# TROUVE cette classe dans ton views.py (ligne ~230)
+class ConstantsView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        from .models import DIVISIONS, ANTENNES
+        
+        # AJOUTER CES LIGNES:
+        NIVEAUX = [
+            (100, "Directeur Général"),
+            (90, "Directeur Général Adjoint"),
+            (70, "Chef de Division"),
+            (60, "Chef de Section"),
+            (50, "Chef d'Antenne"),
+            (30, "Conseiller"),
+        ]
+        
+        return Response({
+            "divisions": [{"code": v, "nom": l} for v, l in DIVISIONS],
+            "antennes":  [{"code": v, "nom": l} for v, l in ANTENNES],
+            "niveaux":   [{"value": v, "label": l} for v, l in NIVEAUX],  # ← AJOUTER
+        })
+
 
 
 
@@ -171,6 +331,37 @@ from .serializers import (
 )
 
 
+#views.py — ONFPP complet
+from rest_framework import generics, viewsets, permissions, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
+from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenObtainPairView
+from django.shortcuts import get_object_or_404
+
+from .models import User, Role, Region, Centre, Page, UserPageAccess
+from .serializers import (
+    CustomTokenObtainPairSerializer,
+    UserCreateSerializer, UserUpdateSerializer, UserListSerializer, MeSerializer,
+    RoleSerializer, RegionSerializer, CentreSerializer,
+    PageSerializer, UserPageAccessSerializer,
+)
+
+
+# ────────────────────────────────────────────────────────────
+#  PERMISSION HELPERS
+# ────────────────────────────────────────────────────────────
+class IsAdminOrDG(permissions.BasePermission):
+    """DG (niveau 100), DGA (90) ou superuser Django."""
+    def has_permission(self, request, view):
+        return bool(
+            request.user and request.user.is_authenticated and
+            (request.user.is_staff or request.user.niveau >= 90)
+        )
+
+
+
 # ── Login JWT ────────────────────────────────────────────────
 class CustomLoginView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
@@ -181,24 +372,11 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        user = request.user
-        return Response({
-            "id":         user.id,
-            "username":   user.username,
-            "first_name": user.first_name,
-            "last_name":  user.last_name,
-            "email":      user.email,
-            "role":       user.role.name   if user.role   else None,
-            "niveau":     user.role.level  if user.role   else 0,
-            "region":     user.region.name if user.region else None,
-            "centre":     user.centre.name if user.centre else None,
-        })
+        serializer = MeSerializer(request.user)
+        return Response(serializer.data)
 
 
-# ── Créer un utilisateur ─────────────────────────────────────
-class UserCreateView(generics.CreateAPIView):
-    serializer_class   = UserCreateSerializer
-    permission_classes = [AllowAny]   # ← remplacez par IsAuthenticated en prod
+
 
 
 # ── Roles / Régions / Centres (lecture seule) ────────────────
@@ -238,11 +416,42 @@ class UserListSerializer(drf_serializers.ModelSerializer):
         ]
 
 class UserListView(generics.ListAPIView):
-    queryset           = User.objects.select_related("role","region","centre").all().order_by("-date_joined")
     serializer_class   = UserListSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs   = User.objects.select_related("role", "region", "centre").all()
+
+        # DG / DGA → tous les utilisateurs
+        if user.niveau >= 90:
+            return qs
+
+        # Chef de Division → utilisateurs de sa division
+        if user.niveau == 70 and user.division:
+            return qs.filter(division=user.division)
+
+        # Chef d'Antenne → utilisateurs de son antenne
+        if user.niveau == 50 and user.antenne:
+            return qs.filter(antenne=user.antenne)
+
+        # Autres → seulement eux-mêmes
+        return qs.filter(id=user.id)
+
+class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset           = User.objects.select_related("role", "region", "centre")
     permission_classes = [IsAuthenticated]
 
+    def get_serializer_class(self):
+        if self.request.method in ("PATCH", "PUT"):
+            return UserUpdateSerializer
+        return UserListSerializer
 
+    def get_queryset(self):
+        user = self.request.user
+        if user.niveau >= 90 or user.is_staff:
+            return User.objects.all()
+        return User.objects.filter(id=user.id)
 # ── Liste des utilisateurs ───────────────────────────────────
 from rest_framework import serializers as drf_serializers
 
@@ -268,7 +477,7 @@ class UserListView(generics.ListAPIView):
 
 
 
-
+#//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 

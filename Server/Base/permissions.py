@@ -12,3 +12,7 @@ class IsHighLevelUser(permissions.BasePermission):
             return False
         # Niveau minimal pour créer un utilisateur
         return user.role and user.role.level >= 3
+
+
+
+

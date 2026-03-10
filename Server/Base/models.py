@@ -4,6 +4,87 @@ from django.db import models
 # models.py
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
+
+# models.py — ONFPP · version complète avec gestion des accès par rôle
+from django.contrib.auth.models import AbstractUser, Group, Permission
+from django.db import models
+
+
+from django.db import models
+from django.conf import settings
+
+
+from django.db import models
+from django.contrib.auth.models import AbstractUser, Group, Permission
+from django.core.exceptions import ValidationError
+from django.conf import settings
+
+
+
+# ══════════════════════════════════════════════════════════════════
+#  CONSTANTES PARTAGÉES
+# ══════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────
+#  CONSTANTES MÉTIER
+# ─────────────────────────────────────────────
+
+
+ANTENNES_CHOICES = [
+    ("conakry",    "Conakry"),
+    ("forecariah", "Forecariah"),
+    ("boke",       "Boké"),
+    ("kindia",     "Kindia"),
+    ("labe",       "Labé"),
+    ("mamou",      "Mamou"),
+    ("faranah",    "Faranah"),
+    ("kankan",     "Kankan"),
+    ("siguiri",    "Siguiri"),
+    ("nzerekore",  "N'Zérékoré"),
+]
+
+
+ANTENNE_CODES = {
+    "conakry":    "CKY",
+    "forecariah": "FRC",
+    "boke":       "BOK",
+    "kindia":     "KND",
+    "labe":       "LBE",
+    "mamou":      "MMU",
+    "faranah":    "FRN",
+    "kankan":     "KNK",
+    "siguiri":    "SGR",
+    "nzerekore":  "NZR",
+}
+
+DIVISIONS_CHOICES = [
+    ("DAP",  "Division Apprentissage et Projets Collectifs"),
+    ("DSE",  "Division Suivi Évaluation"),
+    ("DFC",  "Division Formation Continue"),
+    ("DPL",  "Division Planification"),
+]
+# Niveaux d'accès
+NIVEAUX_ACCES = [
+    (100, "Directeur Général"),
+    (90, "Directeur Général Adjoint"),
+    (70, "Chef de Division"),
+    (60, "Chef de Section"),
+    (50, "Chef d'Antenne"),
+    (30, "Conseiller"),
+]
+
+
+# ── Note mapping (TU AS DÉJÀ) ─────────────────────────────────────
+NOTE_MAPPING = {
+    1: 25,
+    2: 50,
+    3: 75,
+}
+
+
+
+
 
 class Region(models.Model):
     name = models.CharField(max_length=100)
@@ -18,49 +99,148 @@ class Centre(models.Model):
     def __str__(self):
         return self.name
 
+# ─────────────────────────────────────────────
+#  ROLE
+# ─────────────────────────────────────────────
 class Role(models.Model):
-    name = models.CharField(max_length=50, unique=True)
-    level = models.IntegerField(help_text="Plus le niveau est élevé, plus l'accès est haut")
+    name  = models.CharField(max_length=80, unique=True)
+    level = models.IntegerField(
+        default=1,
+        help_text="100=DG · 90=DGA · 70=Chef Div · 60=Chef Section · 50=Chef Antenne · 30=Conseiller"
+    )
+
+    class Meta:
+        ordering = ["-level"]
 
     def __str__(self):
-        return self.name
+        return f"{self.name} (niveau {self.level})"
+
+# ─────────────────────────────────────────────
+#  PAGE (permissions d'affichage)
+# ─────────────────────────────────────────────
+class Page(models.Model):
+    """
+    Chaque entrée représente une page/module de la plateforme.
+    L'admin peut activer/désactiver l'accès à une page pour un utilisateur
+    via UserPageAccess.
+    """
+    key         = models.CharField(max_length=80, unique=True,
+                                   help_text="Identifiant technique : ex 'formations_dap'")
+    label       = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+    # Niveau minimum par défaut pour accéder à cette page
+    niveau_min  = models.IntegerField(default=30)
+    # Divisions autorisées (vide = toutes)
+    divisions   = models.CharField(
+        max_length=50, blank=True,
+        help_text="Codes séparés par virgule ex: DAP,DFC — vide = toutes"
+    )
+    is_active   = models.BooleanField(default=True,
+                                      help_text="Page disponible globalement sur la plateforme")
+
+    class Meta:
+        ordering = ["label"]
+
+    def __str__(self):
+        return f"[{self.key}] {self.label}"
+
+
+
 
 from django.contrib.auth.models import AbstractUser, Group, Permission
 from django.db import models
 
+# ─────────────────────────────────────────────
+#  USER
+# ─────────────────────────────────────────────
 class User(AbstractUser):
-    role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True)
-    region = models.ForeignKey(Region, on_delete=models.SET_NULL, null=True, blank=True)
-    centre = models.ForeignKey(Centre, on_delete=models.SET_NULL, null=True, blank=True)
+    role    = models.ForeignKey(Role,   on_delete=models.SET_NULL, null=True, blank=True)
+    region  = models.ForeignKey(Region, on_delete=models.SET_NULL, null=True, blank=True)
+    centre  = models.ForeignKey(Centre, on_delete=models.SET_NULL, null=True, blank=True)
 
-    # Résoudre les conflits avec AbstractUser
+    # ── Champs spécifiques ONFPP ─────────────────────
+    division = models.CharField(
+        max_length=10, choices=DIVISIONS_CHOICES, blank=True, null=True,
+        help_text="Obligatoire pour Chef de Division, Chef de Section, Conseiller"
+    )
+    antenne_onfpp  = models.CharField(
+        max_length=20, choices=ANTENNES_CHOICES, blank=True, null=True,
+        help_text="Obligatoire pour Chef d'Antenne"
+    )
+
+    # Résoudre les conflits AbstractUser
     groups = models.ManyToManyField(
         Group,
-        related_name="custom_user_set",  # <-- changer le reverse accessor
+        related_name="custom_user_set",
         blank=True,
-        help_text="Les groupes auxquels appartient l'utilisateur"
     )
     user_permissions = models.ManyToManyField(
         Permission,
-        related_name="custom_user_permissions_set",  # <-- changer le reverse accessor
+        related_name="custom_user_permissions_set",
         blank=True,
-        help_text="Permissions spécifiques de l'utilisateur"
     )
 
+    class Meta:
+        ordering = ["-date_joined"]
+
     def __str__(self):
-        return self.username
+        return f"{self.username} ({self.role})"
+
+    @property
+    def niveau(self):
+        return self.role.level if self.role else 0
+
+    @property
+    def is_dg(self):
+        return self.niveau >= NIVEAU_DG
+
+    @property
+    def is_dga_or_above(self):
+        return self.niveau >= NIVEAU_DGA
+
+    @property
+    def is_chef_division(self):
+        return self.niveau == NIVEAU_CHEF_DIV
+
+    @property
+    def is_chef_antenne(self):
+        return self.niveau == NIVEAU_CHEF_ANT
+
+    @property
+    def is_conseiller(self):
+        return self.niveau == NIVEAU_CONSEILLER
 
 
+# ─────────────────────────────────────────────
+#  ACCÈS INDIVIDUELS PAR PAGE
+# ─────────────────────────────────────────────
+class UserPageAccess(models.Model):
+    """
+    Surcharge individuelle des permissions de page.
+    L'admin peut activer ou désactiver une page pour UN utilisateur précis,
+    indépendamment de son rôle.
+    """
+    user       = models.ForeignKey(User, on_delete=models.CASCADE,
+                                   related_name="page_accesses")
+    page       = models.ForeignKey(Page, on_delete=models.CASCADE,
+                                   related_name="user_accesses")
+    is_allowed = models.BooleanField(default=True)
+    note       = models.CharField(max_length=255, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="page_access_updates"
+    )
 
-# models.py
+    class Meta:
+        unique_together = ("user", "page")
+        ordering        = ["user__username", "page__key"]
 
-from django.db import models
+    def __str__(self):
+        status = "✓" if self.is_allowed else "✗"
+        return f"{status} {self.user.username} → {self.page.key}"
 
-NOTE_MAPPING = {
-    1: 25,
-    2: 50,
-    3: 75,
-}
+
 
 class EvaluationSession(models.Model):
     theme = models.CharField(max_length=255)
@@ -164,40 +344,9 @@ class Evaluation(models.Model):
 # models.py
 # models.py
 # models.py
-from django.db import models
-from django.conf import settings
 
 
-# ══════════════════════════════════════════════════════════════════
-#  CONSTANTES PARTAGÉES
-# ══════════════════════════════════════════════════════════════════
-
-ANTENNES_CHOICES = [
-    ("conakry",    "Conakry"),
-    ("forecariah", "Forecariah"),
-    ("boke",       "Boké"),
-    ("kindia",     "Kindia"),
-    ("labe",       "Labé"),
-    ("mamou",      "Mamou"),
-    ("faranah",    "Faranah"),
-    ("kankan",     "Kankan"),
-    ("siguiri",    "Siguiri"),
-    ("nzerekore",  "N'Zérékoré"),
-]
-
-ANTENNE_CODES = {
-    "conakry":    "CKY",
-    "forecariah": "FRC",
-    "boke":       "BOK",
-    "kindia":     "KND",
-    "labe":       "LBE",
-    "mamou":      "MMU",
-    "faranah":    "FRN",
-    "kankan":     "KNK",
-    "siguiri":    "SGR",
-    "nzerekore":  "NZR",
-}
-
+#//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 # ══════════════════════════════════════════════════════════════════
 #  MODÈLE FORMATION
