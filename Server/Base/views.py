@@ -287,29 +287,31 @@ def _compute_access(user, page, override):
 # ────────────────────────────────────────────────────────────
 #  CONSTANTES FRONTEND
 # ────────────────────────────────────────────────────────────
+
+from rest_framework import viewsets
+from .models import Page
+from .serializers import PageSerializer
+
+class PageViewSet(viewsets.ModelViewSet):
+    queryset = Page.objects.all()
+    serializer_class = PageSerializer
 # À LA FIN de ton views.py
 
 # TROUVE cette classe dans ton views.py (ligne ~230)
+from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+
 class ConstantsView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        from .models import DIVISIONS, ANTENNES
-        
-        # AJOUTER CES LIGNES:
-        NIVEAUX = [
-            (100, "Directeur Général"),
-            (90, "Directeur Général Adjoint"),
-            (70, "Chef de Division"),
-            (60, "Chef de Section"),
-            (50, "Chef d'Antenne"),
-            (30, "Conseiller"),
-        ]
+        from .models import DIVISIONS_CHOICES, ANTENNES_CHOICES, NIVEAUX_ACCES
         
         return Response({
-            "divisions": [{"code": v, "nom": l} for v, l in DIVISIONS],
-            "antennes":  [{"code": v, "nom": l} for v, l in ANTENNES],
-            "niveaux":   [{"value": v, "label": l} for v, l in NIVEAUX],  # ← AJOUTER
+            'divisions': [{'code': c, 'nom': n} for c, n in DIVISIONS_CHOICES],
+            'antennes': [{'code': c, 'nom': n} for c, n in ANTENNES_CHOICES],
+            'niveaux': [{'value': v, 'label': l} for v, l in NIVEAUX_ACCES],
         })
 
 
@@ -417,7 +419,7 @@ class UserListSerializer(drf_serializers.ModelSerializer):
 
 class UserListView(generics.ListAPIView):
     serializer_class   = UserListSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user

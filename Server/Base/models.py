@@ -163,7 +163,7 @@ class User(AbstractUser):
         max_length=10, choices=DIVISIONS_CHOICES, blank=True, null=True,
         help_text="Obligatoire pour Chef de Division, Chef de Section, Conseiller"
     )
-    antenne_onfpp  = models.CharField(
+    antenne  = models.CharField(
         max_length=20, choices=ANTENNES_CHOICES, blank=True, null=True,
         help_text="Obligatoire pour Chef d'Antenne"
     )

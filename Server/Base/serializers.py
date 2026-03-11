@@ -93,6 +93,16 @@ class CentreSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'region']
 
 
+
+
+
+from rest_framework import serializers
+from .models import Page
+
+class PageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Page
+        fields = '__all__'
 # ═══════════════════════════════════════════════════════════
 #  2. AUTH & JWT (utilisent RoleSerializer défini au-dessus)
 # ═══════════════════════════════════════════════════════════
@@ -104,7 +114,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token["role"] = user.role.name if user.role else None
         token["niveau"] = user.role.level if user.role else 0
         token["division"] = user.division
-        token["antenne"] = user.antenne_onfpp
+        token["antenne"] = user.antenne
         return token
 
     def validate(self, attrs):
@@ -116,7 +126,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             "region": self.user.region.name if self.user.region else None,
             "centre": self.user.centre.name if self.user.centre else None,
             "division": self.user.division,
-            "antenne": self.user.antenne_onfpp,
+            "antenne": self.user.antenne,
         })
         
         # Pages autorisées (avec overrides)
@@ -170,7 +180,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'id', 'username', 'email', 'password', 'password_confirm',
             'first_name', 'last_name',
             'role', 'role_name',
-            'division', 'antenne_onfpp',
+            'division', 'antenne',
             'region', 'region_name',
             'centre', 'centre_name',
             'is_active', 'is_staff'
@@ -204,7 +214,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
         # Validation règles métier selon niveau
         niveau = attrs['role'].level
         division = attrs.get('division')
-        antenne = attrs.get('antenne_onfpp')
+        antenne = attrs.get('antenne')
         
         # Chef Div/Sect/Conseiller → division obligatoire
         if niveau in [70, 60, 30]:
@@ -217,13 +227,13 @@ class UserCreateSerializer(serializers.ModelSerializer):
         if niveau == 50:
             if not antenne:
                 raise serializers.ValidationError({
-                    "antenne_onfpp": f"Antenne obligatoire pour {attrs['role'].name}"
+                    "antenne": f"Antenne obligatoire pour {attrs['role'].name}"
                 })
         
         # DG/DGA → réinitialiser division/antenne
         if niveau >= 90:
             attrs['division'] = None
-            attrs['antenne_onfpp'] = None
+            attrs['antenne'] = None
         
         return attrs
     
@@ -263,6 +273,8 @@ class UserCreateSerializer(serializers.ModelSerializer):
         return user
 
 
+
+
 class UserListSerializer(serializers.ModelSerializer):
     role = RoleSerializer(read_only=True)
     region = RegionSerializer(read_only=True)
@@ -281,7 +293,7 @@ class UserListSerializer(serializers.ModelSerializer):
             'email', 'is_active', 'date_joined',
             'role', 'niveau_acces', 'role_display',
             'division', 'division_display',
-            'antenne_onfpp', 'antenne_display',  # ← PAS 'antenne'
+            'antenne', 'antenne_display',  # ← PAS 'antenne'
             'region', 'centre',
         ]
     
@@ -291,9 +303,9 @@ class UserListSerializer(serializers.ModelSerializer):
         return dict(DIVISIONS_CHOICES).get(obj.division, obj.division)
     
     def get_antenne_display(self, obj):
-        if not obj.antenne_onfpp:  # ← PAS 'antenne'
+        if not obj.antenne:  # ← PAS 'antenne'
             return None
-        return dict(ANTENNES_CHOICES).get(obj.antenne_onfpp, obj.antenne_onfpp)
+        return dict(ANTENNES_CHOICES).get(obj.antenne, obj.antenne)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -760,7 +772,7 @@ class MeSerializer(serializers.ModelSerializer):
             'id', 'username', 'first_name', 'last_name', 'email',
             'role', 'niveau_acces', 'role_display',
             'division', 'division_display',
-            'antenne_onfpp', 'antenne_display',  # ← CHANGE 'antenne' → 'antenne_onfpp'
+            'antenne', 'antenne_display',  # ← CHANGE 'antenne' → 'antenne_onfpp'
             'region', 'centre',
             'is_staff', 'is_active',
             'pages'  # Liste des pages accessibles
@@ -772,9 +784,9 @@ class MeSerializer(serializers.ModelSerializer):
         return dict(DIVISIONS_CHOICES).get(obj.division, obj.division)
     
     def get_antenne_display(self, obj):
-        if not obj.antenne_onfpp:  # ← CHANGE 'antenne' → 'antenne_onfpp'
+        if not obj.antenne:  # ← CHANGE 'antenne' → 'antenne_onfpp'
             return None
-        return dict(ANTENNES_CHOICES).get(obj.antenne_onfpp, obj.antenne_onfpp)
+        return dict(ANTENNES_CHOICES).get(obj.antenne, obj.antenne)
     
     def get_pages(self, obj):
         """Retourne les pages accessibles avec overrides"""
