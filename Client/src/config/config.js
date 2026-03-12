@@ -71,6 +71,7 @@ const CONFIG = {
   API_REGIONS:      "/api/regions/",
   API_CENTRES:      "/api/centres/",
   API_CONSTANTS:    "/api/constants/",
+  API_DASHBOARD:    "/api/dashboard/",
 
   // ── Pages & Access ───────────────────────────────────────
   API_PAGES:            "/api/pages/",

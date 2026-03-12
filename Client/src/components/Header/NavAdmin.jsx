@@ -139,22 +139,60 @@ const getStoredUser = () => {
     const raw = localStorage.getItem("user");
     if (raw) {
       const u = JSON.parse(raw);
+
+      // ✅ role peut être un objet {id, name, level, niveau_display}
+      //    ou une string "DG" / "Chef de Division"
+      const roleRaw  = u.role;
+      const roleName = typeof roleRaw === "object" && roleRaw !== null
+        ? (roleRaw.name || "DG")   // ← extraire .name de l'objet
+        : (roleRaw || "DG");       // ← utiliser la string directement
+
       const fn = u.first_name || u.firstName || "";
       const ln = u.last_name  || u.lastName  || "";
-      const displayName = fn ? `${fn}${ln?" "+ln:""}` : u.username || u.email || "Admin";
-      return { ...u, displayName, username: u.username || u.email || displayName };
+      const displayName = fn
+        ? `${fn}${ln ? " " + ln : ""}`
+        : u.username || u.email || "Admin";
+
+      return {
+        ...u,
+        role:        roleName,        // ← toujours une STRING
+        roleLevel:   typeof roleRaw === "object" ? (roleRaw.level ?? u.niveau ?? 0) : (u.niveau ?? 0),
+        displayName,
+        username:    u.username || u.email || displayName,
+      };
     }
+
     const token = localStorage.getItem("access");
     if (token) {
       const p = JSON.parse(atob(token.split(".")[1]));
+      const roleRaw  = p.role;
+      const roleName = typeof roleRaw === "object" && roleRaw !== null
+        ? (roleRaw.name || "DG")
+        : (roleRaw || "DG");
+
       const fn = p.first_name || "";
       const ln = p.last_name  || "";
-      const displayName = fn ? `${fn}${ln?" "+ln:""}` : p.username || p.email || "Admin";
-      return { username:p.username||p.email||displayName, displayName, role:p.role||"DG", niveau:p.niveau??0, region:p.region||null, centre:p.centre||null };
+      const displayName = fn
+        ? `${fn}${ln ? " " + ln : ""}`
+        : p.username || p.email || "Admin";
+
+      return {
+        username: p.username || p.email || displayName,
+        displayName,
+        role:      roleName,
+        roleLevel: typeof roleRaw === "object" ? (roleRaw.level ?? p.niveau ?? 0) : (p.niveau ?? 0),
+        niveau:    p.niveau ?? 0,
+        region:    p.region || null,
+        centre:    p.centre || null,
+        division:  p.division || null,
+        antenne:   p.antenne  || null,
+      };
     }
   } catch {}
-  return { username:"Admin", displayName:"Admin", role:"DG", niveau:0 };
+  return { username: "Admin", displayName: "Admin", role: "DG", roleLevel: 100, niveau: 0 };
 };
+
+
 
 /* ══════════════════════════════════════════════════
    CSS — Syne + DM Sans, ultra moderne national
@@ -276,8 +314,8 @@ const NavAdmin = () => {
   const notifRef = useRef(null);
 
   const user        = getStoredUser();
-  const role        = user.role || "DG";
-  const roleLabel   = ROLE_LABELS[role] || role;
+  const role        = user.role || "DG";           // ← déjà une string ✅
+  const roleLabel   = ROLE_LABELS[role] || role;   // ← fonctionne car role est string ✅
   const displayName = user.displayName || user.username || "Admin";
   const initials    = displayName.split(" ").filter(Boolean).map(w=>w[0]).slice(0,2).join("").toUpperCase() || "?";
   const badge       = rb(role);

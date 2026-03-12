@@ -284,6 +284,62 @@ def _compute_access(user, page, override):
     return True
 
 
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
+from .models import User
+from .serializers import UserSerializer
+
+class UserViewSet(viewsets.ModelViewSet):
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        niveau = user.role.level
+
+        # DG / DGA (niveau >= 90) voit tout
+        if niveau >= 90:
+            return User.objects.all()
+
+        # Chef de Division / Section
+        if niveau in [70, 60]:
+            return User.objects.filter(division=user.division)
+
+        # Chef d’Antenne / Conseiller
+        if niveau in [50, 30]:
+            return User.objects.filter(antenne=user.antenne)
+
+        # Par défaut, on retourne juste son propre compte
+        return User.objects.filter(id=user.id)
+
+
+
+# views.py
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def dashboard_view(request):
+    user = request.user
+    niveau = user.role.level if user.role else 0
+
+    # Base queryset filtré selon le rôle
+    if niveau >= 90:
+        qs_users = User.objects.all()
+    elif niveau in [70, 60]:
+        qs_users = User.objects.filter(division=user.division)
+    elif niveau in [50, 30]:
+        qs_users = User.objects.filter(antenne=user.antenne)
+    else:
+        qs_users = User.objects.filter(id=user.id)
+
+    return Response({
+        "total_apprenants": qs_users.count(),
+        "ma_division":      user.division or None,
+        "mon_antenne":      user.antenne  or None,
+        "mon_niveau":       niveau,
+        "mon_role":         user.role.name if user.role else "",
+    })
+
+
 # ────────────────────────────────────────────────────────────
 #  CONSTANTES FRONTEND
 # ────────────────────────────────────────────────────────────

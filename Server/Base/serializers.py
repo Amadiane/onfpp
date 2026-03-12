@@ -271,6 +271,33 @@ class UserListSerializer(serializers.ModelSerializer):
         return dict(ANTENNES_CHOICES).get(obj.antenne, obj.antenne)
 
 
+from rest_framework import serializers
+from .models import User
+
+class UserSerializer(serializers.ModelSerializer):
+    role    = RoleSerializer(read_only=True)
+    division = serializers.CharField(source='division', allow_null=True)
+    antenne  = serializers.CharField(source='antenne', allow_null=True)
+    region  = RegionSerializer(read_only=True)
+    centre  = CentreSerializer(read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            'id',
+            'username',
+            'first_name',
+            'last_name',
+            'email',
+            'role',
+            'division',
+            'antenne',
+            'region',
+            'centre',
+            'is_active',
+            'is_staff',
+        ]
+
 # ═══════════════════════════════════════════════════════════
 #  3. PAGES & ACCESS
 # ═══════════════════════════════════════════════════════════
