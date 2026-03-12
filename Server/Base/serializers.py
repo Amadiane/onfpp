@@ -148,132 +148,95 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return data
 
 
+from rest_framework import serializers
+from django.contrib.auth.password_validation import validate_password
+from .models import User, Role, Region, Centre
+
+from rest_framework import serializers
+from django.contrib.auth.password_validation import validate_password
+from .models import User, Role, Region, Centre
+
 class UserCreateSerializer(serializers.ModelSerializer):
-    """Création utilisateur avec validation règles métier"""
-    password = serializers.CharField(
-        write_only=True,
-        required=True,
-        validators=[validate_password]
-    )
+    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password_confirm = serializers.CharField(write_only=True, required=True)
     
-    # Champs compatibles avec ton code existant
-    role_name = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        write_only=True
-    )
-    region_name = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        write_only=True
-    )
-    centre_name = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        write_only=True
-    )
-    
+    role_name = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    region_name = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    centre_name = serializers.CharField(required=False, allow_blank=True, write_only=True)
+
     class Meta:
         model = User
         fields = [
-            'id', 'username', 'email', 'password', 'password_confirm',
-            'first_name', 'last_name',
-            'role', 'role_name',
-            'division', 'antenne',
-            'region', 'region_name',
-            'centre', 'centre_name',
-            'is_active', 'is_staff'
+            "id", "username", "email", "password", "password_confirm",
+            "first_name", "last_name",
+            "role", "role_name",
+            "division", "antenne",
+            "region", "region_name",
+            "centre", "centre_name",
+            "is_active", "is_staff"
         ]
-        read_only_fields = ['id']
-    
+        read_only_fields = ["id"]
+
     def validate(self, attrs):
-        # Vérif mot de passe
         if attrs['password'] != attrs['password_confirm']:
-            raise serializers.ValidationError({
-                "password": "Les mots de passe ne correspondent pas"
-            })
-        
+            raise serializers.ValidationError({"password": "Les mots de passe ne correspondent pas"})
+
         # Gestion role_name → role
         role = attrs.get('role')
         role_name = attrs.pop('role_name', '').strip()
-        
         if not role and role_name:
             try:
                 attrs['role'] = Role.objects.get(name__iexact=role_name)
             except Role.DoesNotExist:
-                attrs['role'], _ = Role.objects.get_or_create(
-                    name=role_name,
-                    defaults={'level': 30}
-                )
+                attrs['role'], _ = Role.objects.get_or_create(name=role_name, defaults={"level": 30})
         elif not role:
-            raise serializers.ValidationError({
-                "role": "Le rôle est obligatoire"
-            })
-        
-        # Validation règles métier selon niveau
+            raise serializers.ValidationError({"role": "Le rôle est obligatoire"})
+
         niveau = attrs['role'].level
         division = attrs.get('division')
         antenne = attrs.get('antenne')
-        
-        # Chef Div/Sect/Conseiller → division obligatoire
-        if niveau in [70, 60, 30]:
-            if not division or division == "NONE":
-                raise serializers.ValidationError({
-                    "division": f"Division obligatoire pour {attrs['role'].name}"
-                })
-        
-        # Chef d'Antenne → antenne obligatoire
-        if niveau == 50:
-            if not antenne:
-                raise serializers.ValidationError({
-                    "antenne": f"Antenne obligatoire pour {attrs['role'].name}"
-                })
-        
-        # DG/DGA → réinitialiser division/antenne
-        if niveau >= 90:
+
+        # Validation règles métier
+        if niveau in [70, 60]:  # Chef Div / Section
+            if not division:
+                raise serializers.ValidationError({"division": f"Division obligatoire pour {attrs['role'].name}"})
+        else:
             attrs['division'] = None
+
+        if niveau in [50, 30]:  # Chef d’Antenne / Conseiller
+            if not antenne:
+                raise serializers.ValidationError({"antenne": f"Antenne obligatoire pour {attrs['role'].name}"})
+        else:
             attrs['antenne'] = None
-        
+
         return attrs
-    
+
     def create(self, validated_data):
         validated_data.pop('password_confirm')
         password = validated_data.pop('password')
-        
+
         # Gestion region_name / centre_name
         region_name = validated_data.pop('region_name', '').strip()
         centre_name = validated_data.pop('centre_name', '').strip()
-        
+
         region = validated_data.get('region')
         if not region and region_name:
             region, _ = Region.objects.get_or_create(name=region_name)
             validated_data['region'] = region
-        
+
         centre = validated_data.get('centre')
         if not centre and centre_name:
             if region:
-                centre, _ = Centre.objects.get_or_create(
-                    name=centre_name,
-                    defaults={'region': region}
-                )
+                centre, _ = Centre.objects.get_or_create(name=centre_name, defaults={"region": region})
             else:
-                centre = Centre.objects.filter(name=centre_name).first()
-                if not centre:
-                    default_region, _ = Region.objects.get_or_create(name="Non défini")
-                    centre, _ = Centre.objects.get_or_create(
-                        name=centre_name,
-                        defaults={'region': default_region}
-                    )
+                default_region, _ = Region.objects.get_or_create(name="Non défini")
+                centre, _ = Centre.objects.get_or_create(name=centre_name, defaults={"region": default_region})
             validated_data['centre'] = centre
-        
+
         user = User(**validated_data)
         user.set_password(password)
         user.save()
         return user
-
-
-
 
 class UserListSerializer(serializers.ModelSerializer):
     role = RoleSerializer(read_only=True)

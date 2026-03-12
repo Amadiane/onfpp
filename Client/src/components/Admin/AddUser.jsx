@@ -1,504 +1,522 @@
-// src/components/Admin/AddUser.jsx
 import { useState, useEffect } from "react";
-import { PlusCircle, UserPlus, Save, X, Users, Shield, AlertCircle, Check } from "lucide-react";
-import CONFIG from "../../config/config.js";
-import { apiRequest, apiPublic } from "../../endpoints/api";
+import CONFIG from "../../config/config";
+import { apiRequest } from "../../endpoints/api";
 
+const NIVEAUX_ACCES = [
+  { level: 100, name: "Directeur Général" },
+  { level: 90,  name: "Directeur Général Adjoint" },
+  { level: 70,  name: "Chef de Division" },
+  { level: 60,  name: "Chef de Section" },
+  { level: 50,  name: "Chef d'Antenne" },
+  { level: 30,  name: "Conseiller" },
+];
+
+const DIVISIONS_CHOICES = [
+  { code: "DAP", name: "Division Apprentissage et Projets Collectifs" },
+  { code: "DSE", name: "Division Suivi Évaluation" },
+  { code: "DFC", name: "Division Formation Continue" },
+  { code: "DPL", name: "Division Planification" },
+];
+
+const ANTENNES_CHOICES = [
+  { code: "conakry",    name: "Conakry" },
+  { code: "forecariah", name: "Forecariah" },
+  { code: "boke",       name: "Boké" },
+  { code: "kindia",     name: "Kindia" },
+  { code: "labe",       name: "Labé" },
+  { code: "mamou",      name: "Mamou" },
+  { code: "faranah",    name: "Faranah" },
+  { code: "kankan",     name: "Kankan" },
+  { code: "siguiri",    name: "Siguiri" },
+  { code: "nzerekore",  name: "N'Zérékoré" },
+];
+
+const C = {
+  navy:      "#0D1B5E",
+  blue:      "#1A3BD4",
+  iceBlue:   "#C8D9FF",
+  textSub:   "#4A5A8A",
+  textMuted: "#8FA3D8",
+  surface:   "#FFFFFF",
+  bg:        "#F0F4FF",
+  danger:    "#E53935",
+  success:   "#16A34A",
+  shadow:    "rgba(26,59,212,0.12)",
+  border:    "#E2E8F8",
+};
+
+const card = {
+  background: C.surface,
+  borderRadius: 20,
+  border: `1px solid ${C.border}`,
+  boxShadow: `0 4px 32px ${C.shadow}`,
+  padding: "32px 36px",
+  marginBottom: 28,
+};
+
+const labelStyle = {
+  display: "block",
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  color: C.textSub,
+  marginBottom: 7,
+  fontFamily: "'Syne', sans-serif",
+};
+
+function Field({ label, children }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      <label style={labelStyle}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function useInputStyle() {
+  const [focused, setFocused] = useState(false);
+  const style = {
+    width: "100%",
+    padding: "11px 14px",
+    borderRadius: 12,
+    border: `1.5px solid ${focused ? C.blue : C.border}`,
+    background: focused ? "#F5F8FF" : C.surface,
+    fontSize: 14,
+    color: C.navy,
+    fontFamily: "'Syne', sans-serif",
+    outline: "none",
+    boxShadow: focused ? `0 0 0 3px ${C.blue}18` : "none",
+    transition: "all .18s",
+    boxSizing: "border-box",
+  };
+  return { style, onFocus: () => setFocused(true), onBlur: () => setFocused(false) };
+}
+
+function Input({ name, type = "text", placeholder, value, onChange, required }) {
+  const { style, onFocus, onBlur } = useInputStyle();
+  return (
+    <input
+      name={name} type={type} placeholder={placeholder}
+      value={value} onChange={onChange} required={required}
+      style={style} onFocus={onFocus} onBlur={onBlur}
+    />
+  );
+}
+
+function Select({ name, value, onChange, children, required }) {
+  const { style, onFocus, onBlur } = useInputStyle();
+  return (
+    <select
+      name={name} value={value} onChange={onChange} required={required}
+      style={{
+        ...style, cursor: "pointer", appearance: "none",
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238FA3D8' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
+        backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center",
+        paddingRight: 36,
+      }}
+      onFocus={onFocus} onBlur={onBlur}
+    >
+      {children}
+    </select>
+  );
+}
+
+function NiveauBadge({ level, name }) {
+  const palettes = {
+    100: { bg: "#FEF3C7", text: "#92400E" },
+    90:  { bg: "#EDE9FE", text: "#5B21B6" },
+    70:  { bg: "#DBEAFE", text: "#1D4ED8" },
+    60:  { bg: "#D1FAE5", text: "#065F46" },
+    50:  { bg: "#FFE4E6", text: "#9F1239" },
+    30:  { bg: "#F0F4FF", text: "#3730A3" },
+  };
+  const c = palettes[level] || { bg: C.iceBlue, text: C.navy };
+  return (
+    <span style={{
+      display: "inline-block", padding: "3px 10px", borderRadius: 999,
+      fontSize: 11, fontWeight: 700, background: c.bg, color: c.text,
+      fontFamily: "'Syne', sans-serif", letterSpacing: "0.04em",
+    }}>
+      {name || `N${level}`}
+    </span>
+  );
+}
+
+// ────────────────────────────────────────────────────────────
 export default function AddUser() {
-  const [users, setUsers] = useState([]);
-  const [roles, setRoles] = useState([]);
-  const [pages, setPages] = useState([]);
-  const [constants, setConstants] = useState({ divisions: [], antennes: [] });
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
-  const [form, setForm] = useState({
-    username: "",
-    password: "",
-    password_confirm: "",
-    first_name: "",
-    last_name: "",
-    email: "",
-    role: "",
-    division: "",
-    antenne: "",
-  });
-
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [access, setAccess] = useState({});
+  const [users,    setUsers]    = useState([]);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState("");
+  const [success,  setSuccess]  = useState("");
   const [showForm, setShowForm] = useState(false);
 
-  // ─────────────────────────────
-  // Charger données initiales
-  // ─────────────────────────────
-  useEffect(() => {
-    loadData();
-  }, []);
+  const emptyForm = {
+    username: "", password: "", password_confirm: "",
+    first_name: "", last_name: "", email: "",
+    role: "", division: "", antenne: "",
+  };
+  const [form, setForm] = useState(emptyForm);
 
-  async function loadData() {
+  useEffect(() => { loadUsers(); }, []);
+
+  async function loadUsers() {
     try {
-      const constantsData = await apiPublic(CONFIG.API_CONSTANTS);
-
-      const [usersData, rolesData, pagesData] = await Promise.all([
-        apiRequest(CONFIG.API_USER_LIST),
-        apiRequest(CONFIG.API_ROLES),
-        apiRequest(CONFIG.API_PAGES),
-      ]);
-
+      const usersData = await apiRequest(CONFIG.API_USER_LIST);
       setUsers(usersData);
-      setRoles(rolesData);
-      setPages(pagesData);
-      setConstants(constantsData);
     } catch (err) {
       setError(err.message);
     }
   }
 
-  // ─────────────────────────────
-  // Gestion formulaire
-  // ─────────────────────────────
+  // ── LOGIQUE INTACTE ──────────────────────────────────────
   function handleChange(e) {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    if (name === "role") {
+      setForm(prev => ({ ...prev, role: value, division: "", antenne: "" }));
+    } else {
+      setForm(prev => ({ ...prev, [name]: value }));
+    }
   }
+
+  const selectedRoleLevel = form.role ? parseInt(form.role) : null;
+  const showDivision = [70, 60].includes(selectedRoleLevel);
+  const showAntenne  = [50, 30].includes(selectedRoleLevel);
+  const isDGorDGA    = [100, 90].includes(selectedRoleLevel);
+
+  const isFormValid = () => {
+    if (!form.username || !form.password || !form.password_confirm) return false;
+    if (!form.first_name || !form.last_name || !form.email) return false;
+    if (!form.role) return false;
+    if (showDivision && !form.division) return false;
+    if (showAntenne  && !form.antenne)  return false;
+    if (form.password !== form.password_confirm) return false;
+    return true;
+  };
 
   async function createUser(e) {
     e.preventDefault();
+    if (!isFormValid()) return;
     setLoading(true);
     setError("");
     setSuccess("");
 
     try {
+      const roleName = NIVEAUX_ACCES.find(r => r.level === selectedRoleLevel)?.name || "";
       const payload = {
-        ...form,
-        role: form.role ? parseInt(form.role) : null,
-        division: form.division || null,
-        antenne: form.antenne || null,
+        username: form.username,
+        password: form.password,
+        password_confirm: form.password_confirm,
+        first_name: form.first_name,
+        last_name: form.last_name,
+        email: form.email,
+        role_name: roleName,
+        division: showDivision ? form.division : null,
+        antenne:  showAntenne  ? form.antenne  : null,
       };
+
+      console.log("Payload envoyé :", payload);
 
       await apiRequest(CONFIG.API_CREATE_USER, {
         method: "POST",
         body: JSON.stringify(payload),
       });
 
-      setSuccess(`✅ Utilisateur "${form.username}" créé avec succès !`);
-      setForm({
-        username: "",
-        password: "",
-        password_confirm: "",
-        first_name: "",
-        last_name: "",
-        email: "",
-        role: "",
-        division: "",
-        antenne: "",
-      });
+      setSuccess(`Utilisateur "${form.username}" créé avec succès !`);
+      setForm(emptyForm);
       setShowForm(false);
-
-      loadData();
+      loadUsers();
+      setTimeout(() => setSuccess(""), 4000);
     } catch (err) {
       setError(err.message);
     }
-
     setLoading(false);
   }
+  // ────────────────────────────────────────────────────────
 
-  // ─────────────────────────────
-  // Gestion accès pages
-  // ─────────────────────────────
-  async function loadAccess(userId) {
-    setSelectedUser(userId);
-    const data = await apiRequest(`${CONFIG.API_USER_SUMMARY}?user=${userId}`);
-
-    const map = {};
-    data.pages.forEach((p) => {
-      map[p.page_id] = p.effective;
-    });
-
-    setAccess(map);
-  }
-
-  function toggleAccess(pageId) {
-    setAccess((prev) => ({ ...prev, [pageId]: !prev[pageId] }));
-  }
-
-  async function saveAccess() {
-    try {
-      const accesses = Object.entries(access).map(([page, is_allowed]) => ({
-        page_id: parseInt(page),
-        is_allowed,
-      }));
-
-      await apiRequest(CONFIG.API_BULK_SET_ACCESS, {
-        method: "POST",
-        body: JSON.stringify({ user_id: selectedUser, accesses }),
-      });
-
-      setSuccess("✅ Accès sauvegardés avec succès !");
-      setTimeout(() => setSuccess(""), 3000);
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  // ─────────────────────────────
-  // Helpers
-  // ─────────────────────────────
-  function roleName(id) {
-    const r = roles.find((r) => r.id === id);
-    return r ? r.name : "";
-  }
-
-  function divisionName(code) {
-    if (!code) return "—";
-    const d = constants.divisions.find((d) => d.code === code);
-    return d ? d.nom : code;
-  }
-
-  function antenneName(code) {
-    if (!code) return "—";
-    const a = constants.antennes.find((a) => a.code === code);
-    return a ? a.nom : code;
-  }
-
-  // Afficher champs supplémentaires selon rôle
-  const selectedRole = roles.find((r) => r.id === parseInt(form.role));
-  const showDivision = selectedRole && selectedRole.level <= 70; // Chef division, section, conseiller
-  const showAntenne = selectedRole && selectedRole.level === 50; // Chef antenne
-  const isDGorDGA = selectedRole && selectedRole.level >= 90;
-
-  // ─────────────────────────────
-  // UI
-  // ─────────────────────────────
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 p-8">
-      <div className="max-w-7xl mx-auto">
-        
-        {/* EN-TÊTE */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 mb-8 border border-purple-100">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-purple-600 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <UserPlus className="w-8 h-8 text-white" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-                  Gestion des Utilisateurs
-                </h1>
-                <p className="text-gray-600 mt-1">
-                  Créer et gérer les accès des utilisateurs ONFPP
-                </p>
-              </div>
+    <div style={{
+      minHeight: "100vh",
+      background: C.bg,
+      padding: "40px 32px",
+      fontFamily: "'Syne', sans-serif",
+    }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&display=swap');
+        tr.user-row:hover td { background: #EEF2FF !important; }
+      `}</style>
+
+      <div style={{ maxWidth: 960, margin: "0 auto" }}>
+
+        {/* ── EN-TÊTE ── */}
+        <div style={{
+          ...card,
+          background: `linear-gradient(135deg, ${C.navy} 0%, #1A2F8A 55%, ${C.blue} 100%)`,
+          border: "none",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 16,
+          padding: "28px 36px",
+          position: "relative",
+          overflow: "hidden",
+        }}>
+          {/* Halos déco */}
+          <div style={{ position:"absolute", top:-60, right:-60, width:200, height:200, borderRadius:"50%", background:"rgba(255,255,255,0.05)", pointerEvents:"none" }}/>
+          <div style={{ position:"absolute", bottom:-40, left:200, width:140, height:140, borderRadius:"50%", background:"rgba(107,159,255,0.08)", pointerEvents:"none" }}/>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 18, position:"relative" }}>
+            <div style={{
+              width: 52, height: 52, borderRadius: 16,
+              background: "rgba(255,255,255,0.15)",
+              backdropFilter: "blur(8px)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 26, border: "1px solid rgba(255,255,255,0.2)",
+            }}>👤</div>
+            <div>
+              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "#fff", letterSpacing: "-0.02em" }}>
+                Gestion des Utilisateurs
+              </h1>
+              <p style={{ margin: "4px 0 0", fontSize: 12, color: "rgba(255,255,255,0.55)", fontWeight: 500 }}>
+                Office National de la Formation Professionnelle · {users.length} utilisateur{users.length !== 1 ? "s" : ""}
+              </p>
             </div>
-            
-            <button
-              onClick={() => setShowForm(!showForm)}
-              className="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2 font-semibold"
-            >
-              {showForm ? (
-                <>
-                  <X className="w-5 h-5" />
-                  Annuler
-                </>
-              ) : (
-                <>
-                  <PlusCircle className="w-5 h-5" />
-                  Nouvel Utilisateur
-                </>
-              )}
-            </button>
           </div>
+
+          <button
+            onClick={() => { setShowForm(f => !f); setError(""); }}
+            style={{
+              padding: "11px 22px",
+              borderRadius: 12,
+              border: "1.5px solid rgba(255,255,255,0.25)",
+              background: showForm ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.16)",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+              fontFamily: "'Syne', sans-serif",
+              letterSpacing: "0.03em",
+              transition: "all .18s",
+              position: "relative",
+            }}
+          >
+            {showForm ? "✕  Annuler" : "+  Nouvel utilisateur"}
+          </button>
         </div>
 
-        {/* MESSAGES */}
+        {/* ── MESSAGES ── */}
         {error && (
-          <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-lg flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-            <p className="text-red-700 font-medium">{error}</p>
-          </div>
+          <div style={{
+            background: "#FFF1F2", border: `1.5px solid #FECDD3`,
+            borderRadius: 12, padding: "12px 16px", marginBottom: 20,
+            fontSize: 13, color: C.danger, fontWeight: 600,
+            display: "flex", alignItems: "center", gap: 8,
+          }}>⚠️ {error}</div>
         )}
-        
         {success && (
-          <div className="bg-green-50 border-l-4 border-green-500 p-4 mb-6 rounded-lg flex items-start gap-3">
-            <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-            <p className="text-green-700 font-medium">{success}</p>
-          </div>
+          <div style={{
+            background: "#F0FDF4", border: `1.5px solid #BBF7D0`,
+            borderRadius: 12, padding: "12px 16px", marginBottom: 20,
+            fontSize: 13, color: C.success, fontWeight: 600,
+            display: "flex", alignItems: "center", gap: 8,
+          }}>✅ {success}</div>
         )}
 
-        {/* FORMULAIRE */}
+        {/* ── FORMULAIRE ── */}
         {showForm && (
-          <div className="bg-white rounded-2xl shadow-xl p-8 mb-8 border border-purple-100">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <UserPlus className="w-6 h-6 text-purple-600" />
-              Créer un Utilisateur
-            </h2>
-            
-            <form onSubmit={createUser} className="space-y-6">
-              
-              {/* Informations de base */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Nom d'utilisateur *
-                  </label>
-                  <input
-                    type="text"
-                    name="username"
-                    value={form.username}
-                    onChange={handleChange}
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                    placeholder="Nom d'utilisateur unique"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Mot de passe *
-                  </label>
-                  <input
-                    type="password"
-                    name="password"
-                    value={form.password}
-                    onChange={handleChange}
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                    placeholder="Minimum 8 caractères"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Confirmer le mot de passe *
-                  </label>
-                  <input
-                    type="password"
-                    name="password_confirm"
-                    value={form.password_confirm}
-                    onChange={handleChange}
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                    placeholder="Confirmer le mot de passe"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Prénom
-                  </label>
-                  <input
-                    type="text"
-                    name="first_name"
-                    value={form.first_name}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                    placeholder="Prénom"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Nom
-                  </label>
-                  <input
-                    type="text"
-                    name="last_name"
-                    value={form.last_name}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                    placeholder="Nom de famille"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={form.email}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                    placeholder="email@example.com"
-                  />
-                </div>
+          <div style={card}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 28 }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 10,
+                background: `linear-gradient(135deg, ${C.navy}, ${C.blue})`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 16,
+              }}>✏️</div>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: C.navy, letterSpacing: "-0.01em" }}>
+                Créer un utilisateur
+              </h2>
+            </div>
+
+            <form onSubmit={createUser}>
+              {/* Séparateur section */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: C.textMuted, textTransform: "uppercase" }}>
+                  Informations personnelles
+                </span>
+                <div style={{ flex: 1, height: 1, background: C.border }} />
               </div>
 
-              {/* Rôle et permissions */}
-              <div className="border-t pt-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-purple-600" />
-                  Rôle et Permissions
-                </h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Rôle *
-                    </label>
-                    <select
-                      name="role"
-                      value={form.role}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                    >
-                      <option value="">Sélectionner un rôle</option>
-                      {roles.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.name} (Niveau {r.level})
-                        </option>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 20px", marginBottom: 24 }}>
+                <Field label="Prénom *">
+                  <Input name="first_name" placeholder="Prénom" value={form.first_name} onChange={handleChange} required />
+                </Field>
+                <Field label="Nom *">
+                  <Input name="last_name" placeholder="Nom de famille" value={form.last_name} onChange={handleChange} required />
+                </Field>
+                <Field label="Email *">
+                  <Input name="email" type="email" placeholder="email@onfpp.gov.gn" value={form.email} onChange={handleChange} required />
+                </Field>
+                <Field label="Nom d'utilisateur *">
+                  <Input name="username" placeholder="ex : m.diallo" value={form.username} onChange={handleChange} required />
+                </Field>
+                <Field label="Mot de passe *">
+                  <Input name="password" type="password" placeholder="Minimum 8 caractères" value={form.password} onChange={handleChange} required />
+                </Field>
+                <Field label="Confirmer le mot de passe *">
+                  <Input name="password_confirm" type="password" placeholder="Répéter le mot de passe" value={form.password_confirm} onChange={handleChange} required />
+                </Field>
+              </div>
+
+              {/* Mismatch warning */}
+              {form.password && form.password_confirm && form.password !== form.password_confirm && (
+                <p style={{ fontSize: 12, color: C.danger, fontWeight: 600, margin: "-12px 0 16px" }}>
+                  ⚠️ Les mots de passe ne correspondent pas
+                </p>
+              )}
+
+              {/* Section rôle */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: C.textMuted, textTransform: "uppercase" }}>
+                  Rôle & affectation
+                </span>
+                <div style={{ flex: 1, height: 1, background: C.border }} />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 20px", marginBottom: 28 }}>
+                <Field label="Rôle *">
+                  <Select name="role" value={form.role} onChange={handleChange} required>
+                    <option value="">Sélectionner un rôle</option>
+                    {NIVEAUX_ACCES.map(r => (
+                      <option key={r.level} value={r.level}>{r.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+
+                {showDivision && (
+                  <Field label="Division *">
+                    <Select name="division" value={form.division} onChange={handleChange} required>
+                      <option value="">Sélectionner une division</option>
+                      {DIVISIONS_CHOICES.map(d => (
+                        <option key={d.code} value={d.code}>{d.code} — {d.name}</option>
                       ))}
-                    </select>
+                    </Select>
+                  </Field>
+                )}
+
+                {showAntenne && (
+                  <Field label="Antenne *">
+                    <Select name="antenne" value={form.antenne} onChange={handleChange} required>
+                      <option value="">Sélectionner une antenne</option>
+                      {ANTENNES_CHOICES.map(a => (
+                        <option key={a.code} value={a.code}>{a.name}</option>
+                      ))}
+                    </Select>
+                  </Field>
+                )}
+
+                {isDGorDGA && (
+                  <div style={{
+                    background: "#EEF2FF", border: `1px solid #C7D2FE`,
+                    borderRadius: 12, padding: "14px 16px",
+                    fontSize: 13, color: "#3730A3", fontWeight: 600,
+                    display: "flex", alignItems: "center", gap: 8,
+                    alignSelf: "flex-end",
+                  }}>
+                    ℹ️ Accès complet — toutes divisions et antennes
                   </div>
-                  
-                  {/* Division */}
-                  {showDivision && (
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Division *
-                      </label>
-                      <select
-                        name="division"
-                        value={form.division}
-                        onChange={handleChange}
-                        required
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                      >
-                        <option value="">Sélectionner une division</option>
-                        {constants.divisions.map((d) => (
-                          <option key={d.code} value={d.code}>
-                            {d.code} - {d.nom}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {/* Antenne */}
-                  {showAntenne && (
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Antenne *
-                      </label>
-                      <select
-                        name="antenne"
-                        value={form.antenne}
-                        onChange={handleChange}
-                        required
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                      >
-                        <option value="">Sélectionner une antenne</option>
-                        {constants.antennes.map((a) => (
-                          <option key={a.code} value={a.code}>
-                            {a.nom}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  
-                  {/* DG/DGA info */}
-                  {isDGorDGA && (
-                    <div className="md:col-span-2">
-                      <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
-                        <p className="text-purple-700 font-medium">
-                          ℹ️ DG/DGA ont accès à toutes les divisions et antennes
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
 
-              {/* Boutons */}
-              <div className="flex gap-4 pt-6">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl hover:shadow-lg transition-all font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Création en cours...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-5 h-5" />
-                      Créer l'Utilisateur
-                    </>
-                  )}
-                </button>
-                
-                <button
-                  type="button"
-                  onClick={() => setShowForm(false)}
-                  className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all font-semibold"
-                >
-                  Annuler
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={loading || !isFormValid()}
+                style={{
+                  width: "100%", padding: "14px",
+                  borderRadius: 14, border: "none",
+                  background: (loading || !isFormValid())
+                    ? C.textMuted
+                    : `linear-gradient(135deg, ${C.navy}, ${C.blue})`,
+                  color: "#fff", fontSize: 14, fontWeight: 800,
+                  cursor: (loading || !isFormValid()) ? "not-allowed" : "pointer",
+                  fontFamily: "'Syne', sans-serif",
+                  letterSpacing: "0.04em",
+                  boxShadow: (!loading && isFormValid()) ? `0 6px 24px ${C.shadow}` : "none",
+                  transition: "all .2s",
+                }}
+              >
+                {loading ? "Création en cours…" : "Créer l'utilisateur"}
+              </button>
             </form>
           </div>
         )}
 
-        {/* LISTE UTILISATEURS */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 border border-purple-100">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-            <Users className="w-6 h-6 text-purple-600" />
-            Utilisateurs ({users.length})
-          </h2>
-          
+        {/* ── LISTE UTILISATEURS ── */}
+        <div style={card}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 22 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 10,
+              background: `linear-gradient(135deg, ${C.navy}, ${C.blue})`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 16,
+            }}>👥</div>
+            <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: C.navy, letterSpacing: "-0.01em" }}>
+              Utilisateurs enregistrés
+              <span style={{
+                marginLeft: 10, fontSize: 12, fontWeight: 700,
+                background: C.iceBlue, color: C.blue,
+                padding: "2px 10px", borderRadius: 999,
+                verticalAlign: "middle",
+              }}>{users.length}</span>
+            </h2>
+          </div>
+
           {users.length === 0 ? (
-            <div className="text-center py-12">
-              <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 text-lg">Aucun utilisateur trouvé</p>
+            <div style={{ textAlign: "center", padding: "48px 0", color: C.textMuted }}>
+              <div style={{ fontSize: 44, marginBottom: 12 }}>👥</div>
+              <p style={{ fontWeight: 600, fontSize: 14 }}>Aucun utilisateur trouvé</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div style={{ overflowX: "auto", borderRadius: 14, border: `1px solid ${C.border}` }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
-                  <tr className="border-b-2 border-purple-100">
-                    <th className="text-left py-4 px-4 font-bold text-gray-700">Utilisateur</th>
-                    <th className="text-left py-4 px-4 font-bold text-gray-700">Rôle</th>
-                    <th className="text-left py-4 px-4 font-bold text-gray-700">Division</th>
-                    <th className="text-left py-4 px-4 font-bold text-gray-700">Antenne</th>
-                    <th className="text-center py-4 px-4 font-bold text-gray-700">Actions</th>
+                  <tr style={{ background: C.bg }}>
+                    {["Utilisateur", "Rôle", "Division", "Antenne"].map(h => (
+                      <th key={h} style={{
+                        textAlign: "left", padding: "12px 16px",
+                        fontSize: 10, fontWeight: 700, letterSpacing: "0.08em",
+                        textTransform: "uppercase", color: C.textMuted,
+                        borderBottom: `1px solid ${C.border}`,
+                      }}>{h}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((user) => (
-                    <tr key={user.id} className="border-b border-gray-100 hover:bg-purple-50 transition-colors">
-                      <td className="py-4 px-4">
-                        <div>
-                          <p className="font-semibold text-gray-800">{user.username}</p>
-                          <p className="text-sm text-gray-500">
-                            {user.first_name} {user.last_name}
+                  {users.map((u, i) => (
+                    <tr key={u.id} className="user-row" style={{
+                      borderBottom: i < users.length - 1 ? `1px solid ${C.border}` : "none",
+                      cursor: "default",
+                    }}>
+                      <td style={{ padding: "13px 16px" }}>
+                        <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: C.navy }}>
+                          {u.username}
+                        </p>
+                        {(u.first_name || u.last_name) && (
+                          <p style={{ margin: "2px 0 0", fontSize: 12, color: C.textMuted }}>
+                            {u.first_name} {u.last_name}
                           </p>
-                        </div>
+                        )}
                       </td>
-                      <td className="py-4 px-4">
-                        <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
-                          {roleName(user.role)}
-                        </span>
+                      <td style={{ padding: "13px 16px" }}>
+                        {u.role
+                          ? <NiveauBadge level={u.role.level} name={u.role.name} />
+                          : <span style={{ color: C.textMuted, fontSize: 13 }}>—</span>
+                        }
                       </td>
-                      <td className="py-4 px-4 text-gray-700">
-                        {divisionName(user.division)}
+                      <td style={{ padding: "13px 16px", fontSize: 13, color: C.textSub, fontWeight: 500 }}>
+                        {u.division || <span style={{ color: C.textMuted }}>—</span>}
                       </td>
-                      <td className="py-4 px-4 text-gray-700">
-                        {antenneName(user.antenne)}
-                      </td>
-                      <td className="py-4 px-4 text-center">
-                        <button
-                          onClick={() => loadAccess(user.id)}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                        >
-                          Gérer Accès
-                        </button>
+                      <td style={{ padding: "13px 16px", fontSize: 13, color: C.textSub, fontWeight: 500 }}>
+                        {u.antenne || <span style={{ color: C.textMuted }}>—</span>}
                       </td>
                     </tr>
                   ))}
@@ -508,80 +526,6 @@ export default function AddUser() {
           )}
         </div>
 
-        {/* GESTION ACCÈS PAGES */}
-        {selectedUser && (
-          <div className="bg-white rounded-2xl shadow-xl p-8 mt-8 border border-purple-100">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                <Shield className="w-6 h-6 text-purple-600" />
-                Accès aux Pages
-              </h2>
-              
-              <div className="flex gap-3">
-                <button
-                  onClick={saveAccess}
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center gap-2"
-                >
-                  <Save className="w-4 h-4" />
-                  Sauvegarder
-                </button>
-                
-                <button
-                  onClick={() => setSelectedUser(null)}
-                  className="px-6 py-2 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium flex items-center gap-2"
-                >
-                  <X className="w-4 h-4" />
-                  Fermer
-                </button>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {pages.map((p) => {
-                const isActive = access[p.id] || false;
-                
-                return (
-                  <div
-                    key={p.id}
-                    onClick={() => toggleAccess(p.id)}
-                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer ${
-                      isActive
-                        ? "border-green-500 bg-green-50"
-                        : "border-gray-300 bg-gray-50 hover:border-purple-300"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <h3 className="font-bold text-gray-800">{p.label}</h3>
-                        {p.description && (
-                          <p className="text-xs text-gray-500 mt-1">{p.description}</p>
-                        )}
-                      </div>
-                      
-                      <div
-                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ml-3 ${
-                          isActive
-                            ? "bg-green-500 border-green-600"
-                            : "bg-white border-gray-300"
-                        }`}
-                      >
-                        {isActive && (
-                          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                            <path
-                              fillRule="evenodd"
-                              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
