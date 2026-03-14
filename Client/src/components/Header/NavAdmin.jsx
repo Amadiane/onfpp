@@ -1,564 +1,815 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, BookOpen, GraduationCap,
-  ClipboardList, Award, Settings, LogOut,
-  Bell, FileText, CalendarDays, Package, Layers,
-  CheckCircle2, Briefcase, UserCog, Clock,
-  AlertTriangle, X, PanelLeftClose, PanelLeftOpen,
+  LayoutDashboard, BookOpen, GraduationCap, ClipboardList, Award,
+  Settings, LogOut, Bell, FileText, CalendarDays, Package, Layers,
+  CheckCircle2, Briefcase, UserCog, Clock, AlertTriangle,
+  PanelLeftClose, PanelLeftOpen, X, Globe, ChevronRight,
 } from "lucide-react";
 import CONFIG from "../../config/config.js";
 import logo from "../../assets/logo.png";
 
-const C = {
-  sideBg:"#FFFFFF", sideBorder:"#EDF0FA", sideHov:"#F4F6FF",
-  sideAct:"#EEF2FF", sideActLine:"#1A3BD4", sideLabel:"#3B4F82",
-  sideLabelDim:"#9BADD4", sideSection:"#B8C4E0",
-  navy:"#08122E", navyMid:"#0D1B5E", blue:"#1A3BD4", blueSoft:"#2E50E8",
-  iceBlue:"#D6E0FF", iceBluePale:"#EEF2FF", divider:"#EDF0FA",
-  textPri:"#08122E", textSub:"#3B4F82", textMuted:"#7B8EC4",
-  accent:"#E8A000", accentBg:"#FFF8E6",
-  success:"#047857", emerald:"#10B981", purple:"#5B21B6",
-  danger:"#B91C1C", shadow:"rgba(8,18,46,0.08)", shadowMd:"rgba(8,18,46,0.13)",
+/* ═══════════════════════════════════════════════════
+   DESIGN SYSTEM — Sovereign Dark · Institutional Precision
+   Fil conducteur : Bleu ONFPP #1A3B8C + Or guinéen + Navy profond
+═══════════════════════════════════════════════════ */
+export const DS = {
+  /* ── Fonds navy ── */
+  navy:        "#04101F",
+  navyMid:     "#081733",
+  navyUp:      "#0D2050",
+  brand:       "#1A3B8C",
+  brandViv:    "#2451B8",
+  brandGlow:   "rgba(26,59,140,0.5)",
+  electric:    "#3D68FF",
+  sky:         "#5B82FF",
+
+  /* ── Surfaces claires ── */
+  page:        "#F1F3FB",
+  surface:     "#FFFFFF",
+  lift:        "#F6F8FF",
+  iceStrong:   "#C8D4FF",
+  ice:         "#DBE5FF",
+  iceFaint:    "#EEF2FF",
+  divider:     "#E2E8F5",
+
+  /* ── Texte ── */
+  textPri:     "#04101F",
+  textSec:     "#2C3F7A",
+  textMuted:   "#7A90C4",
+
+  /* ── Or guinéen ── */
+  gold:        "#B87A00",
+  goldBright:  "#E09A00",
+  goldViv:     "#F5B020",
+  goldPale:    "#FFF6DC",
+
+  /* ── Accents sémantiques ── */
+  green:       "#046048",
+  greenLight:  "#0BAF7A",
+  greenPale:   "#E2F8F1",
+  rose:        "#CC1840",
+  rosePale:    "#FDEAEF",
+  violet:      "#5A22CC",
+  teal:        "#077870",
+
+  /* ── Ombres ── */
+  sh1:         "rgba(4,16,31,0.07)",
+  sh2:         "rgba(4,16,31,0.14)",
+  sh3:         "rgba(4,16,31,0.26)",
+  shHero:      "rgba(4,16,31,0.65)",
 };
 
-export const SIDEBAR_W  = 248;
-export const SIDEBAR_SM = 64;
+/* Gradient sidebar & hero — même valeur */
+export const HERO_BG = `linear-gradient(148deg, ${DS.navy} 0%, #061228 18%, #091A3E 38%, #0E2258 58%, ${DS.brand} 82%, ${DS.brandViv} 100%)`;
+export const SIDEBAR_W  = 258;
+export const SIDEBAR_SM = 68;
 export const TOPBAR_H   = 60;
 
-const ROLE_LABELS = {
-  DG:"Directeur Général",CD:"Chef de Division",DR:"Directeur Régional",
-  CC:"Chef de Centre",FORMATEUR:"Formateur",SUPERADMIN:"Super Administrateur",
-  "Directeur Général":"Directeur Général","Chef de Division":"Chef de Division",
-  "Directeur Régional":"Directeur Régional","Chef de Centre":"Chef de Centre",
-  "Formateur":"Formateur","Super Administrateur":"Super Administrateur",
-  "Chef d'Antenne":"Chef d'Antenne","Conseiller":"Conseiller",
+/* ── Rôles ── */
+export const ROLE_LABELS = {
+  "Directeur Général":"Directeur Général","Directeur Général Adjoint":"DG Adjoint",
+  "Chef de Division":"Chef de Division","Chef de Section":"Chef de Section",
+  "Chef d'Antenne":"Chef d'Antenne","Conseiller":"Conseiller","Formateur":"Formateur",
+  "Super Administrateur":"Super Admin",
+  DG:"Directeur Général",CD:"Chef de Division",DR:"DG Adjoint",
+  CC:"Chef d'Antenne",FORMATEUR:"Formateur",SUPERADMIN:"Super Admin",
 };
 
-const ROLE_COLORS = {
-  default:{ bg:"#EEF2FF",text:"#1A3BD4",dot:"#1A3BD4" },
-  DR:{ bg:"#ECFDF5",text:"#047857",dot:"#10B981" },
-  CC:{ bg:"#FFF7ED",text:"#B45309",dot:"#F59E0B" },
-  FORMATEUR:{ bg:"#F0F9FF",text:"#0369A1",dot:"#0EA5E9" },
-  SUPERADMIN:{ bg:"#FFF1F2",text:"#B91C1C",dot:"#F43F5E" },
-  "Chef d'Antenne":{ bg:"#F5F3FF",text:"#5B21B6",dot:"#7C3AED" },
+export const RS_DARK = {
+  default:{bg:"rgba(93,118,255,.18)",text:"#9AB0FF",border:"rgba(93,118,255,.28)",dot:"#6B8FFF"},
+  "Directeur Général":    {bg:"rgba(93,118,255,.18)",text:"#9AB0FF",border:"rgba(93,118,255,.28)",dot:"#6B8FFF"},
+  "Directeur Général Adjoint":{bg:"rgba(93,118,255,.18)",text:"#9AB0FF",border:"rgba(93,118,255,.28)",dot:"#6B8FFF"},
+  "Chef de Division":     {bg:"rgba(93,118,255,.18)",text:"#9AB0FF",border:"rgba(93,118,255,.28)",dot:"#6B8FFF"},
+  "Chef de Section":      {bg:"rgba(11,175,122,.16)",text:"#5AEEC0",border:"rgba(11,175,122,.26)",dot:"#2DD4A0"},
+  "Chef d'Antenne":       {bg:"rgba(229,154,0,.15)", text:"#FFD060",border:"rgba(229,154,0,.26)", dot:"#E09A00"},
+  "Conseiller":           {bg:"rgba(150,90,255,.16)",text:"#C4AAFF",border:"rgba(150,90,255,.26)",dot:"#AA82FF"},
+  "Formateur":            {bg:"rgba(0,200,245,.13)", text:"#6ADEFF",border:"rgba(0,200,245,.23)", dot:"#18D4F5"},
+  "Super Administrateur": {bg:"rgba(255,70,90,.15)", text:"#FF9EAC",border:"rgba(255,70,90,.25)", dot:"#FF6070"},
+  DG:{bg:"rgba(93,118,255,.18)",text:"#9AB0FF",border:"rgba(93,118,255,.28)",dot:"#6B8FFF"},
+  CD:{bg:"rgba(93,118,255,.18)",text:"#9AB0FF",border:"rgba(93,118,255,.28)",dot:"#6B8FFF"},
+  DR:{bg:"rgba(93,118,255,.18)",text:"#9AB0FF",border:"rgba(93,118,255,.28)",dot:"#6B8FFF"},
+  CC:{bg:"rgba(229,154,0,.15)",text:"#FFD060",border:"rgba(229,154,0,.26)",dot:"#E09A00"},
+  SUPERADMIN:{bg:"rgba(255,70,90,.15)",text:"#FF9EAC",border:"rgba(255,70,90,.25)",dot:"#FF6070"},
 };
-const rc = (role) => ROLE_COLORS[role] || ROLE_COLORS[
-  role==="Directeur Régional"?"DR":role==="Chef de Centre"?"CC":
-  (role==="Formateur"||role==="FORMATEUR")?"FORMATEUR":
-  (role==="Super Administrateur"||role==="SUPERADMIN")?"SUPERADMIN":"default"
-] || ROLE_COLORS.default;
 
-const ALL = ["DG","CD","DR","CC","FORMATEUR","SUPERADMIN",
-  "Directeur Général","Chef de Division","Directeur Régional",
-  "Chef de Centre","Formateur","Super Administrateur","Chef d'Antenne","Conseiller"];
-const MGMT = ["DG","CD","DR","Directeur Général","Chef de Division","Directeur Régional"];
-const OPS  = ["CC","FORMATEUR","Chef de Centre","Formateur"];
+export const RS_LIGHT = {
+  default:{bg:"#EBF0FF",text:"#1A3B8C",border:"#BCC8FF",dot:"#1A3B8C"},
+  "Directeur Général":    {bg:"#EBF0FF",text:"#1A3B8C",border:"#BCC8FF",dot:"#1A3B8C"},
+  "Directeur Général Adjoint":{bg:"#EBF0FF",text:"#1A3B8C",border:"#BCC8FF",dot:"#1A3B8C"},
+  "Chef de Division":     {bg:"#EBF0FF",text:"#1A3B8C",border:"#BCC8FF",dot:"#1A3B8C"},
+  "Chef de Section":      {bg:"#E0F8F1",text:"#046048",border:"#85E0C5",dot:"#0BAF7A"},
+  "Chef d'Antenne":       {bg:"#FFF4D6",text:"#7A4F00",border:"#F0CC78",dot:"#B87A00"},
+  "Conseiller":           {bg:"#F0EAFF",text:"#5A22CC",border:"#C2ABFA",dot:"#7C45EE"},
+  "Formateur":            {bg:"#DDFAFF",text:"#025070",border:"#88DEFF",dot:"#0891B2"},
+  "Super Administrateur": {bg:"#FDEAEF",text:"#CC1840",border:"#F5AABC",dot:"#E02050"},
+  DG:{bg:"#EBF0FF",text:"#1A3B8C",border:"#BCC8FF",dot:"#1A3B8C"},
+  CD:{bg:"#EBF0FF",text:"#1A3B8C",border:"#BCC8FF",dot:"#1A3B8C"},
+  DR:{bg:"#EBF0FF",text:"#1A3B8C",border:"#BCC8FF",dot:"#1A3B8C"},
+  CC:{bg:"#FFF4D6",text:"#7A4F00",border:"#F0CC78",dot:"#B87A00"},
+  SUPERADMIN:{bg:"#FDEAEF",text:"#CC1840",border:"#F5AABC",dot:"#E02050"},
+};
+
+const rD = r => RS_DARK[r]  || RS_DARK.default;
+const rL = r => RS_LIGHT[r] || RS_LIGHT.default;
+
+/* ── Nav items ── */
+const ALL  = ["DG","CD","DR","CC","FORMATEUR","SUPERADMIN","Directeur Général","Directeur Général Adjoint","Chef de Division","Chef de Section","Chef de Centre","Formateur","Super Administrateur","Chef d'Antenne","Conseiller"];
+const MGMT = ["DG","CD","DR","Directeur Général","Directeur Général Adjoint","Chef de Division","Chef de Section"];
+const OPS  = ["CC","FORMATEUR","Chef de Centre","Formateur","Chef d'Antenne"];
 const ADM  = ["DG","CD","SUPERADMIN","Directeur Général","Chef de Division","Super Administrateur"];
+const NS   = ALL.filter(r=>!["SUPERADMIN","Super Administrateur"].includes(r));
 
-const NAV_DEF = [
-  { path:"/dashboardAdmin",    label:"Tableau de bord",      icon:LayoutDashboard, roles:ALL },
-  { path:"/formations",        label:"Catalogue formations", icon:BookOpen,        roles:ALL.filter(r=>!["SUPERADMIN","Super Administrateur"].includes(r)) },
-  { path:"/sessions",          label:"Sessions planifiées",  icon:CalendarDays,    roles:ALL.filter(r=>!["SUPERADMIN","Super Administrateur"].includes(r)) },
-  { path:"/certifications",    label:"Certifications",       icon:Award,           roles:ALL.filter(r=>!["SUPERADMIN","Super Administrateur"].includes(r)) },
-  { path:"/inscription",       label:"Inscriptions",         icon:GraduationCap,   roles:ALL.filter(r=>!["SUPERADMIN","Super Administrateur"].includes(r)) },
-  { path:"/listeApprenants",   label:"Liste Apprenants",     icon:ClipboardList,   roles:ALL.filter(r=>!["SUPERADMIN","Super Administrateur"].includes(r)) },
-  { path:"/presences",         label:"Présences",            icon:CalendarDays,    roles:[...MGMT,...OPS] },
-  { path:"/evaluations",       label:"Évaluations",          icon:Award,           roles:[...MGMT,...OPS] },
-  { path:"/discipline",        label:"Discipline",           icon:AlertTriangle,   roles:OPS },
-  { path:"/suiviEvaluation",   label:"Suivi Évaluation",     icon:CheckCircle2,    roles:MGMT },
-  { path:"/attestations",      label:"Attestations PDF",     icon:FileText,        roles:[...MGMT,...OPS] },
-  { path:"/enquete-insertion", label:"Enquête insertion",    icon:Clock,           roles:[...MGMT,"CC","Chef de Centre"] },
-  { path:"/resultats",         label:"Résultats finaux",     icon:CheckCircle2,    roles:OPS },
-  { path:"/entreprise",        label:"Entreprises",          icon:Briefcase,       roles:MGMT },
-  { path:"/formationContinue", label:"Formation DFC",        icon:Package,         roles:MGMT },
-  { path:"/formateurs",        label:"Formateurs",           icon:UserCog,         roles:MGMT },
-  { path:"/formationDAPc",     label:"Formation DAPC",       icon:Package,         roles:MGMT },
-  { path:"/addUser",           label:"Gestion utilisateurs", icon:UserCog,         roles:ADM },
-  { path:"/homePost",          label:"Contenu site public",  icon:Layers,          roles:["DG","CD","Directeur Général","Chef de Division"] },
-  { path:"/parametres",        label:"Paramètres",           icon:Settings,        roles:ADM },
+const NAV = [
+  {path:"/dashboardAdmin",    label:"Tableau de bord",      icon:LayoutDashboard, roles:ALL},
+  {path:"/inscription",       label:"Inscriptions",         icon:GraduationCap,   roles:NS},
+  {path:"/listeApprenants",   label:"Liste des Candidats",     icon:ClipboardList,   roles:NS},
+  {path:"/formateurs",        label:"Gestion des Formateurs",           icon:UserCog,         roles:MGMT},
+  {path:"/formationContinue", label:"Formation DFC",        icon:Package,         roles:MGMT},
+  {path:"/formationDAPc",     label:"Formation DAPC",       icon:Package,         roles:MGMT},
+  {path:"/entreprise",        label:"Entreprises",          icon:Briefcase,       roles:MGMT},
+  {path:"/suiviEvaluation",   label:"Suivi Évaluation",     icon:CheckCircle2,    roles:MGMT},
+  {path:"/addUser",           label:"Gestion utilisateurs", icon:UserCog,         roles:ADM},
+  {path:"/boitecommune",           label:"Boite Commune", icon:UserCog,         roles:ADM},
+  {path:"/rapports",           label:"Rapports", icon:UserCog,         roles:ADM},
+  {path:"/attestations",      label:"Attestations PDF",     icon:FileText,        roles:[...MGMT,...OPS]},
+  {path:"/enquete-insertion", label:"Enquête insertion 3 mois",    icon:Clock,           roles:[...MGMT,"CC","Chef de Centre","Chef d'Antenne"]},
+  {path:"/homePost",          label:"Contenu site public",  icon:Layers,          roles:["DG","CD","Directeur Général","Chef de Division"]},
+  // {path:"/parametres",        label:"Paramètres",           icon:Settings,        roles:ADM},
 ];
 
-const buildNavItems = (role) => {
-  const seen = new Set();
-  return NAV_DEF.filter(item => {
-    if (seen.has(item.path) || !item.roles.includes(role)) return false;
-    seen.add(item.path); return true;
-  });
+const buildNav = role => {
+  const s=new Set();
+  return NAV.filter(i=>{if(s.has(i.path)||!i.roles.includes(role))return false;s.add(i.path);return true;});
 };
 
-const getStoredUser = () => {
-  try {
-    const raw = localStorage.getItem("user");
-    if (raw) {
-      const u = JSON.parse(raw);
-      const rr = u.role;
-      const roleName = typeof rr==="object"&&rr!==null ? (rr.name||"DG") : (rr||"DG");
-      const fn=u.first_name||u.firstName||"", ln=u.last_name||u.lastName||"";
-      const displayName = fn ? `${fn}${ln?" "+ln:""}` : u.username||u.email||"Admin";
-      return { ...u, role:roleName, displayName, username:u.username||u.email||displayName, division:u.division||null, antenne:u.antenne||null };
+const getUser = () => {
+  try{
+    const raw=localStorage.getItem("user");
+    if(raw){
+      const p=JSON.parse(raw); const rr=p.role;
+      const role=typeof rr==="object"&&rr?rr.name||"Directeur Général":rr||"Directeur Général";
+      const fn=p.first_name||p.firstName||"",ln=p.last_name||p.lastName||"";
+      const name=fn?`${fn}${ln?" "+ln:""}`:p.username||p.email||"Admin";
+      return{...p,role,name,username:p.username||p.email||name,division:p.division||null,antenne:p.antenne||null};
     }
-    const token = localStorage.getItem("access");
-    if (token) {
-      const p = JSON.parse(atob(token.split(".")[1]));
-      const rr=p.role, roleName=typeof rr==="object"&&rr!==null?(rr.name||"DG"):(rr||"DG");
-      const fn=p.first_name||"", ln=p.last_name||"";
-      const displayName=fn?`${fn}${ln?" "+ln:""}`:p.username||p.email||"Admin";
-      return { username:p.username||p.email||displayName, displayName, role:roleName, division:p.division||null, antenne:p.antenne||null };
+    const tok=localStorage.getItem("access");
+    if(tok){
+      const p=JSON.parse(atob(tok.split(".")[1]));
+      const rr=p.role;
+      const role=typeof rr==="object"&&rr?rr.name||"Directeur Général":rr||"Directeur Général";
+      const fn=p.first_name||"",ln=p.last_name||"";
+      const name=fn?`${fn}${ln?" "+ln:""}`:p.username||p.email||"Admin";
+      return{username:p.username||p.email||name,name,role,division:p.division||null,antenne:p.antenne||null};
     }
-  } catch {}
-  return { username:"Admin", displayName:"Admin", role:"DG" };
+  }catch{}
+  return{username:"Admin",name:"Admin",role:"Directeur Général"};
 };
 
-const STYLES = `
-  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
-  .na-root*,.na-root*::before,.na-root*::after{box-sizing:border-box}
-  .na-root,.na-root *:not(style){font-family:'DM Sans',sans-serif!important;-webkit-font-smoothing:antialiased}
+/* ═══════════════════════════════════════════════════
+   CSS — Sovereign Dark · Institutional Precision
+   Polices : Sora (corps ultra-moderne) + Fraunces (display)
+═══════════════════════════════════════════════════ */
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,700;1,9..144,400;1,9..144,600&display=swap');
 
-  .na-si{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;
-    text-decoration:none;border:none;background:transparent;
-    transition:background .13s ease,transform .11s ease;
-    position:relative;overflow:visible;width:100%}
-  .na-si:hover{background:#F4F6FF;transform:translateX(1px)}
-  .na-si.act{background:#EEF2FF}
-  .na-si.act::before{content:'';position:absolute;left:0;top:18%;bottom:18%;
-    width:3px;border-radius:0 3px 3px 0;background:#1A3BD4}
+.nv,.nv *:not(style){font-family:'Sora',sans-serif!important;-webkit-font-smoothing:antialiased;box-sizing:border-box;}
+.nv-f{font-family:'Fraunces',serif!important;}
 
-  .na-lbl{overflow:hidden;white-space:nowrap;
-    transition:opacity .18s ease,max-width .25s cubic-bezier(.22,1,.36,1)}
+/* ── Sidebar transition ── */
+.nv-side{transition:width .3s cubic-bezier(.16,1,.3,1);will-change:width;overflow:hidden;}
 
-  .na-tip{position:absolute;left:calc(100% + 13px);top:50%;transform:translateY(-50%);
-    background:#08122E;color:#fff;font-size:11.5px;font-weight:600;white-space:nowrap;
-    padding:6px 11px;border-radius:8px;pointer-events:none;opacity:0;
-    transition:opacity .13s ease;z-index:9999;box-shadow:0 6px 20px rgba(8,18,46,.12)}
-  .na-tip::before{content:'';position:absolute;right:100%;top:50%;transform:translateY(-50%);
-    border:5px solid transparent;border-right-color:#08122E}
-  .na-si:hover .na-tip{opacity:1}
+/* ─────────────────────────────────────────
+   Nav item : effet hover avec trait lumineux
+───────────────────────────────────────────*/
+.nv-item{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 11px;border-radius:10px;
+  cursor:pointer;text-decoration:none;border:none;background:transparent;
+  position:relative;width:100%;overflow:hidden;
+  transition:background .18s ease, transform .16s cubic-bezier(.34,1.56,.64,1);
+}
+.nv-item::after{
+  content:'';position:absolute;left:0;top:0;bottom:0;
+  width:0;background:linear-gradient(90deg,rgba(93,130,255,.22),transparent);
+  transition:width .22s ease;border-radius:10px;
+}
+.nv-item:hover{background:rgba(255,255,255,.07);transform:translateX(3px);}
+.nv-item:hover::after{width:100%;}
 
-  .na-scroll::-webkit-scrollbar{width:2px}
-  .na-scroll::-webkit-scrollbar-track{background:transparent}
-  .na-scroll::-webkit-scrollbar-thumb{background:#D6E0FF;border-radius:2px}
+/* Actif : fond glass avec lueur */
+.nv-item.act{
+  background:linear-gradient(135deg,rgba(26,59,140,.5) 0%,rgba(61,104,255,.22) 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 6px 24px rgba(26,59,140,.35);
+}
+.nv-item.act::before{
+  content:'';position:absolute;left:0;top:22%;bottom:22%;
+  width:3px;border-radius:0 3px 3px 0;
+  background:linear-gradient(180deg,#7EB0FF 0%,#3D68FF 100%);
+  box-shadow:0 0 16px rgba(93,130,255,.9),0 0 6px rgba(93,130,255,.5);
+}
+.nv-item.act::after{width:100%;}
 
-  .na-sidebar{transition:width .25s cubic-bezier(.22,1,.36,1);will-change:width}
+/* ── Tooltip sidebar réduite ── */
+.nv-tip{
+  position:absolute;left:calc(100% + 12px);top:50%;transform:translateY(-50%);
+  background:#04101F;color:#E8EFFF;
+  font-size:11.5px;font-weight:500;white-space:nowrap;
+  padding:7px 13px;border-radius:9px;
+  pointer-events:none;opacity:0;
+  transition:opacity .14s ease, transform .14s ease;
+  transform:translateY(-50%) translateX(-4px);
+  z-index:9999;
+  border:1px solid rgba(93,130,255,.2);
+  box-shadow:0 10px 32px rgba(4,16,31,.6), 0 0 0 1px rgba(255,255,255,.04);
+}
+.nv-tip::before{
+  content:'';position:absolute;right:100%;top:50%;transform:translateY(-50%);
+  border:5px solid transparent;border-right-color:#04101F;
+}
+.nv-item:hover .nv-tip{opacity:1;transform:translateY(-50%) translateX(0);}
 
-  @keyframes naSlideDown{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
-  .na-panel{animation:naSlideDown .16s cubic-bezier(.22,1,.36,1) both}
+/* ── Scrollbar ── */
+.nv-scroll::-webkit-scrollbar{width:2px;}
+.nv-scroll::-webkit-scrollbar-track{background:transparent;}
+.nv-scroll::-webkit-scrollbar-thumb{background:rgba(93,130,255,.28);border-radius:2px;}
 
-  .na-ni{transition:background .1s;cursor:pointer}
-  .na-ni:hover{background:#EEF2FF!important}
+/* ── Animations ── */
+@keyframes nvFade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.nv-fade{animation:nvFade .32s cubic-bezier(.16,1,.3,1) both;}
 
-  @keyframes naPulse{0%,100%{box-shadow:0 0 0 0 rgba(232,160,0,.5)}60%{box-shadow:0 0 0 5px transparent}}
-  .na-badge{animation:naPulse 2.5s ease infinite}
+@keyframes nvOrb1{0%,100%{opacity:.5;transform:scale(1) translate(0,0)}50%{opacity:.9;transform:scale(1.15) translate(-12px,-18px)}}
+.nv-orb1{animation:nvOrb1 11s ease-in-out infinite;}
+@keyframes nvOrb2{0%,100%{opacity:.3;transform:scale(1)}50%{opacity:.55;transform:scale(1.1) translate(8px,14px)}}
+.nv-orb2{animation:nvOrb2 14s ease-in-out infinite;}
 
-  @keyframes naSpin{to{transform:rotate(360deg)}}
-  .na-spin{animation:naSpin .7s linear infinite}
+@keyframes nvBadge{0%,100%{box-shadow:0 0 0 0 rgba(204,24,64,.6)}65%{box-shadow:0 0 0 7px transparent}}
+.nv-badge{animation:nvBadge 2.6s ease infinite;}
 
-  .na-tb{width:34px;height:34px;border-radius:8px;border:1px solid #EDF0FA;
-    background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;
-    color:#7B8EC4;transition:all .13s ease}
-  .na-tb:hover{background:#EEF2FF;color:#08122E;border-color:#D6E0FF}
-  .na-tb.on{background:#1A3BD408;color:#1A3BD4;border-color:#1A3BD428}
+@keyframes nvSpin{to{transform:rotate(360deg)}}
+.nv-spin{animation:nvSpin .7s linear infinite;}
 
-  .na-tog{width:26px;height:26px;border-radius:6px;border:1px solid #EDF0FA;
-    background:#EEF2FF;cursor:pointer;display:flex;align-items:center;justify-content:center;
-    color:#7B8EC4;transition:all .13s ease;flex-shrink:0}
-  .na-tog:hover{background:#D6E0FF;color:#1A3BD4;border-color:#D6E0FF}
+@keyframes nvPulse{0%,100%{box-shadow:0 0 0 0 rgba(11,175,122,.45)}55%{box-shadow:0 0 0 6px transparent}}
+.nv-live{animation:nvPulse 2.2s ease infinite;}
+
+@keyframes nvBlink{0%,49%{opacity:1}50%,100%{opacity:.15}}
+.nv-blink{animation:nvBlink 1s step-end infinite;}
+
+/* ── Notif panel drop ── */
+@keyframes nvDrop{from{opacity:0;transform:translateY(-8px) scale(.97)}to{opacity:1;transform:none}}
+.nv-panel{animation:nvDrop .2s cubic-bezier(.16,1,.3,1) both;}
+.nv-ni{transition:background .12s;}
+.nv-ni:hover{background:#EBF0FF!important;}
+
+/* ── Topbar buttons ── */
+.nv-btn{
+  width:35px;height:35px;border-radius:9px;
+  border:1px solid #E2E8F5;background:transparent;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  color:#7A90C4;transition:all .15s;
+}
+.nv-btn:hover{background:#EBF0FF;color:#04101F;border-color:#C8D4FF;}
+.nv-btn.on{background:rgba(26,59,140,.08);color:#1A3B8C;border-color:rgba(26,59,140,.2);}
+
+/* ── Toggle ── */
+.nv-tog{
+  width:27px;height:27px;border-radius:8px;
+  border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  color:rgba(255,255,255,.4);transition:all .15s;flex-shrink:0;
+}
+.nv-tog:hover{background:rgba(255,255,255,.16);color:#fff;border-color:rgba(255,255,255,.22);}
+
+/* ── Chip profil topbar ── */
+.nv-chip{cursor:default;transition:box-shadow .16s, border-color .16s;}
+.nv-chip:hover{border-color:#C8D4FF!important;box-shadow:0 6px 22px rgba(4,16,31,.1)!important;}
+
+/* ── Section label ── */
+.nv-sec{
+  font-size:7px;font-weight:700;letter-spacing:.3em;text-transform:uppercase;
+  color:rgba(255,255,255,.14);padding:10px 11px 4px;
+}
+
+/* ── Stat chip topbar ── */
+.nv-stat{
+  display:flex;align-items:center;gap:6px;
+  padding:6px 12px;border-radius:9px;
+  border:1px solid #E2E8F5;background:#F6F8FF;
+  font-size:10.5px;transition:border-color .14s,background .14s;cursor:default;
+}
+.nv-stat:hover{background:#EBF0FF;border-color:#C8D4FF;}
 `;
 
-const NavAdmin = () => {
-  const location = useLocation();
-  const navigate  = useNavigate();
+/* ═══════════════════════════════════════════════════
+   COMPOSANT
+═══════════════════════════════════════════════════ */
+export default function NavAdmin() {
+  const loc=useLocation(), nav=useNavigate();
+  const [col,setCol]=useState(false);
+  const [notif,setNotif]=useState(false);
+  const [counts,setCounts]=useState({contacts:0,community:0,newsletter:0});
+  const [nList,setNList]=useState([]);
+  const [nLoad,setNLoad]=useState(false);
+  const [time,setTime]=useState(new Date());
+  const [online,setOnline]=useState(null);
+  const nRef=useRef(null);
 
-  const [collapsed,    setCollapsed]    = useState(false);
-  const [showNotif,    setShowNotif]    = useState(false);
-  const [counts,       setCounts]       = useState({ contacts:0, community:0, newsletter:0 });
-  const [notifData,    setNotifData]    = useState([]);
-  const [notifLoading, setNotifLoading] = useState(false);
-  const [time,         setTime]         = useState(new Date());
-  const notifRef = useRef(null);
+  const u=getUser();
+  const role=u.role||"Directeur Général";
+  const label=ROLE_LABELS[role]||role;
+  const name=u.name||u.username||"Admin";
+  const ini=name.split(" ").filter(Boolean).map(w=>w[0]).slice(0,2).join("").toUpperCase()||"?";
+  const rd=rD(role), rl=rL(role);
+  const items=buildNav(role);
+  const total=counts.contacts+counts.community+counts.newsletter;
+  const sw=col?SIDEBAR_SM:SIDEBAR_W;
+  const scope=u.division?`Div. ${u.division}`:u.antenne?`Antenne ${u.antenne}`:"Accès global";
+  const isAct=p=>loc.pathname===p||loc.pathname.startsWith(p+"/");
+  const curPage=items.find(i=>isAct(i.path))?.label||"Tableau de bord";
 
-  const user        = getStoredUser();
-  const role        = user.role || "DG";
-  const roleLabel   = ROLE_LABELS[role] || role;
-  const displayName = user.displayName || user.username || "Admin";
-  const initials    = displayName.split(" ").filter(Boolean).map(w=>w[0]).slice(0,2).join("").toUpperCase() || "?";
-  const badge       = rc(role);
-  const navItems    = buildNavItems(role);
-  const totalNotifs = counts.contacts + counts.community + counts.newsletter;
-  const sideW       = collapsed ? SIDEBAR_SM : SIDEBAR_W;
-  const perimetre   = user.division ? `Div. ${user.division}` : user.antenne ? `Antenne ${user.antenne}` : null;
+  useEffect(()=>{window.dispatchEvent(new CustomEvent("sidebar-toggle",{detail:{collapsed:col}}));},[col]);
+  useEffect(()=>{const t=setInterval(()=>setTime(new Date()),1000);return()=>clearInterval(t);},[]);
 
-  useEffect(() => {
-    window.dispatchEvent(new CustomEvent("sidebar-toggle", { detail:{ collapsed } }));
-  }, [collapsed]);
-
-  useEffect(() => {
-    const t = setInterval(() => setTime(new Date()), 30000);
-    return () => clearInterval(t);
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const r1=await fetch(CONFIG.API_CONTACT_LIST);
-        if(r1.ok){const d=await r1.json();setCounts(p=>({...p,contacts:(Array.isArray(d)?d:d.results||[]).length}));}
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const r=await fetch(CONFIG.API_CONTACT_LIST);
+        if(r.ok){const d=await r.json();setCounts(p=>({...p,contacts:(Array.isArray(d)?d:d.results||[]).length}));setOnline(true);}
         const r2=await fetch(CONFIG.API_POSTULANT_LIST);
         if(r2.ok){const d=await r2.json();setCounts(p=>({...p,community:(Array.isArray(d)?d:d.results||[]).length}));}
         const r3=await fetch(CONFIG.API_ABONNEMENT_LIST);
         if(r3.ok){const d=await r3.json();setCounts(p=>({...p,newsletter:(Array.isArray(d)?d:d.results||[]).length}));}
-      } catch {}
+      }catch{setOnline(false);}
     })();
-  }, []);
+  },[]);
 
-  const loadNotifs = async () => {
-    if (notifData.length > 0) return;
-    setNotifLoading(true);
-    try {
-      const [r1,r2] = await Promise.allSettled([
+  const loadN=async()=>{
+    if(nList.length>0)return; setNLoad(true);
+    try{
+      const[r1,r2]=await Promise.allSettled([
         fetch(CONFIG.API_CONTACT_LIST).then(r=>r.ok?r.json():[]),
         fetch(CONFIG.API_POSTULANT_LIST).then(r=>r.ok?r.json():[]),
       ]);
       const c=r1.status==="fulfilled"?(Array.isArray(r1.value)?r1.value:r1.value?.results||[]):[];
       const p=r2.status==="fulfilled"?(Array.isArray(r2.value)?r2.value:r2.value?.results||[]):[];
-      setNotifData([
-        ...c.slice(0,3).map((x,i)=>({text:x.nom||x.name||x.sujet||"Nouveau message",detail:x.email||"",type:"contact",read:i>1})),
+      setNList([
+        ...c.slice(0,3).map((x,i)=>({text:x.nom||x.name||"Nouveau message",detail:x.email||"",type:"contact",read:i>1})),
         ...p.slice(0,3).map((x,i)=>({text:x.nom_complet||x.nom||"Nouveau postulant",detail:x.formation||"",type:"candidat",read:i>0})),
       ].slice(0,6));
-    } catch {}
-    finally { setNotifLoading(false); }
+    }catch{}finally{setNLoad(false);}
   };
 
-  useEffect(() => {
-    const h = e => { if(notifRef.current&&!notifRef.current.contains(e.target)) setShowNotif(false); };
-    document.addEventListener("mousedown",h);
-    return () => document.removeEventListener("mousedown",h);
-  }, []);
+  useEffect(()=>{
+    const h=e=>{if(nRef.current&&!nRef.current.contains(e.target))setNotif(false);};
+    document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
+  },[]);
 
-  const handleLogout = () => {
-    localStorage.removeItem("access"); localStorage.removeItem("user");
-    navigate("/login");
-  };
+  const logout=()=>{localStorage.removeItem("access");localStorage.removeItem("user");nav("/login");};
+  const hh=String(time.getHours()).padStart(2,"0");
+  const mm=String(time.getMinutes()).padStart(2,"0");
+  const ss=String(time.getSeconds()).padStart(2,"0");
+  const ds=time.toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"});
 
-  const isActive = p => location.pathname===p || location.pathname.startsWith(p+"/");
-  const heure   = time.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
-  const dateStr = time.toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"});
-
-  return (
+  return(
     <>
-      <style>{STYLES}</style>
+      <style>{CSS}</style>
 
-      {/* ══ SIDEBAR ══ */}
-      <aside className="na-root na-sidebar" style={{
-        position:"fixed",top:0,left:0,bottom:0,width:sideW,
-        background:C.sideBg,
-        borderRight:`1px solid ${C.sideBorder}`,
-        boxShadow:`2px 0 20px ${C.shadow}`,
+      {/* ╔═══════════════════════════════════════════════════
+          ║  SIDEBAR — Sovereign Dark                         ║
+          ║  Navy #04101F → Brand #1A3B8C avec orbes vivantes ║
+          ╚═══════════════════════════════════════════════════*/}
+      <aside className="nv nv-side" style={{
+        position:"fixed",top:0,left:0,bottom:0,width:sw,
+        background:HERO_BG,
+        borderRight:"1px solid rgba(93,130,255,.12)",
+        boxShadow:`5px 0 70px ${DS.shHero}`,
         zIndex:300,display:"flex",flexDirection:"column",overflow:"hidden",
       }}>
 
-        {/* Barre tricolore Guinée */}
-        <div style={{position:"absolute",top:0,left:0,right:0,height:3,display:"flex",zIndex:1,flexShrink:0}}>
-          <div style={{flex:1,background:"#CE1126"}}/>
-          <div style={{flex:1,background:C.accent}}/>
-          <div style={{flex:1,background:"#009460"}}/>
+        {/* ── Décors atmosphériques ── */}
+        <div style={{position:"absolute",inset:0,pointerEvents:"none",overflow:"hidden",zIndex:0}}>
+
+          {/* Micro-grille institutionnelle */}
+          <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:.06}} xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="nvgrid" width="40" height="40" patternUnits="userSpaceOnUse">
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,1)" strokeWidth=".5"/>
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#nvgrid)"/>
+          </svg>
+
+          {/* Orbe bleue — haut gauche */}
+          <div className="nv-orb1" style={{
+            position:"absolute",top:"-20%",left:"-25%",
+            width:380,height:380,borderRadius:"50%",
+            background:"radial-gradient(circle, rgba(26,59,140,.42) 0%, rgba(61,104,255,.15) 45%, transparent 70%)",
+            filter:"blur(36px)",
+          }}/>
+          {/* Orbe verte subtile — bas droite */}
+          <div className="nv-orb2" style={{
+            position:"absolute",bottom:"-15%",right:"-18%",
+            width:320,height:320,borderRadius:"50%",
+            background:"radial-gradient(circle,rgba(11,175,122,.12) 0%,transparent 68%)",
+            filter:"blur(40px)",
+          }}/>
+          {/* Orbe dorée — milieu droite */}
+          <div style={{
+            position:"absolute",top:"42%",right:"-10%",
+            width:100,height:100,borderRadius:"50%",
+            background:"radial-gradient(circle,rgba(224,154,0,.16),transparent 70%)",
+          }}/>
+          {/* Ligne diagonale décorative */}
+          <div style={{
+            position:"absolute",top:"18%",left:"-10%",
+            width:"130%",height:1,
+            background:"linear-gradient(90deg,transparent,rgba(93,130,255,.12),transparent)",
+            transform:"rotate(-12deg)",
+          }}/>
         </div>
 
-        {/* Header : logo + toggle */}
+        {/* ── Barre tricolore Guinée (6px, plus affirmée) ── */}
+        <div style={{position:"absolute",top:0,left:0,right:0,height:6,display:"flex",zIndex:5}}>
+          <div style={{flex:1,background:"linear-gradient(90deg,#B01010,#D42020)"}}/>
+          <div style={{flex:1,background:`linear-gradient(90deg,${DS.gold},${DS.goldViv})`}}/>
+          <div style={{flex:1,background:`linear-gradient(90deg,${DS.green},${DS.greenLight})`}}/>
+        </div>
+
+        {/* ── LOGO ── */}
         <div style={{
-          marginTop:3,
-          padding: collapsed ? "14px 0" : "14px 14px",
-          borderBottom:`1px solid ${C.sideBorder}`,
+          marginTop:6,position:"relative",zIndex:2,
+          padding:col?"13px 0":"14px 16px",
+          borderBottom:"1px solid rgba(255,255,255,.06)",
           display:"flex",alignItems:"center",
-          justifyContent: collapsed ? "center" : "space-between",
-          flexShrink:0,minHeight:60,
+          justifyContent:col?"center":"space-between",
+          flexShrink:0,minHeight:TOPBAR_H,
         }}>
-          <Link to="/dashboardAdmin" style={{textDecoration:"none",display:"flex",alignItems:"center"}}>
-            <img src={logo} alt="ONFPP" style={{
-              height: collapsed ? 26 : 34,
-              width:"auto",objectFit:"contain",
-              transition:"height .25s cubic-bezier(.22,1,.36,1)",
-            }}/>
+          <Link to="/dashboardAdmin" style={{textDecoration:"none",display:"flex",alignItems:"center",gap:12}}>
+            {/* Logo ONFPP original — cadre blanc avec halo */}
+            <div style={{
+              width:col?38:44,height:col?38:44,
+              borderRadius:col?12:14,flexShrink:0,
+              background:"#FFFFFF",
+              display:"flex",alignItems:"center",justifyContent:"center",
+              boxShadow:"0 0 0 1px rgba(255,255,255,.15), 0 6px 24px rgba(0,0,0,.38), 0 0 40px rgba(93,130,255,.2)",
+              overflow:"hidden",
+              transition:"width .28s cubic-bezier(.16,1,.3,1), height .28s, border-radius .28s",
+            }}>
+              <img src={logo} alt="ONFPP" style={{width:"86%",height:"86%",objectFit:"contain"}}/>
+            </div>
+            {!col&&(
+              <div className="nv-fade">
+                <p className="nv-f" style={{
+                  fontSize:14.5,fontWeight:700,color:"#fff",lineHeight:1.1,letterSpacing:"-.2px",
+                }}>ONFPP</p>
+                <p style={{
+                  fontSize:7,color:"rgba(255,255,255,.28)",fontWeight:600,
+                  letterSpacing:".28em",textTransform:"uppercase",marginTop:3,
+                }}>République de Guinée</p>
+              </div>
+            )}
           </Link>
-          {!collapsed && (
-            <button className="na-tog" onClick={()=>setCollapsed(true)} title="Réduire">
+          {!col&&(
+            <button className="nv-tog" onClick={()=>setCol(true)} title="Réduire">
               <PanelLeftClose size={12}/>
             </button>
           )}
         </div>
 
-        {/* Expand btn (collapsed) */}
-        {collapsed && (
-          <div style={{display:"flex",justifyContent:"center",paddingTop:10,flexShrink:0}}>
-            <button className="na-tog" onClick={()=>setCollapsed(false)} title="Déplier" style={{width:32,height:32,borderRadius:8}}>
+        {/* Expand (réduit) */}
+        {col&&(
+          <div style={{display:"flex",justifyContent:"center",padding:"10px 0 4px",zIndex:2,position:"relative",flexShrink:0}}>
+            <button className="nv-tog" onClick={()=>setCol(false)} title="Déplier" style={{width:36,height:36,borderRadius:10}}>
               <PanelLeftOpen size={12}/>
             </button>
           </div>
         )}
 
-        {/* Profil (déplié) */}
-        {!collapsed && (
-          <div style={{
-            margin:"10px 10px 2px",padding:"10px 12px",
-            borderRadius:10,background:C.iceBluePale,
-            border:`1px solid ${C.iceBlue}55`,
+        {/* ── PROFIL CARD (déplié) ── */}
+        {!col&&(
+          <div className="nv-fade" style={{
+            position:"relative",zIndex:2,
+            margin:"10px 11px 6px",
+            padding:"14px 14px 12px",
+            borderRadius:15,
+            background:"rgba(255,255,255,.062)",
+            border:"1px solid rgba(255,255,255,.09)",
+            backdropFilter:"blur(20px)",
           }}>
-            <div style={{display:"flex",alignItems:"center",gap:9}}>
-              <div style={{
-                width:34,height:34,borderRadius:9,flexShrink:0,
-                background:`linear-gradient(135deg,${C.navy},${C.blue})`,
-                display:"flex",alignItems:"center",justifyContent:"center",
-                boxShadow:`0 2px 10px ${C.blue}22`,
-              }}>
-                <span style={{fontSize:11,fontWeight:800,color:"#fff",letterSpacing:"-0.3px"}}>{initials}</span>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              {/* Avatar avec halo de couleur rôle */}
+              <div style={{position:"relative",flexShrink:0}}>
+                <div style={{
+                  width:44,height:44,borderRadius:13,
+                  background:`linear-gradient(140deg,${rd.dot}50,${rd.dot}18)`,
+                  border:"1.5px solid rgba(255,255,255,.2)",
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  boxShadow:`0 0 0 3px rgba(255,255,255,.06), 0 8px 22px rgba(0,0,0,.35), 0 0 28px ${rd.dot}30`,
+                }}>
+                  <span className="nv-f" style={{fontSize:18,fontWeight:600,fontStyle:"italic",color:"#fff",letterSpacing:"-.3px"}}>{ini}</span>
+                </div>
+                {/* Badge statut connexion */}
+                <div style={{
+                  position:"absolute",bottom:-2,right:-2,
+                  width:13,height:13,borderRadius:4,
+                  background:online===false?DS.rose:online?DS.greenLight:"rgba(255,255,255,.2)",
+                  border:"2px solid rgba(20,30,55,.6)",
+                  boxShadow:`0 0 8px ${online===false?DS.rose:online?DS.greenLight:"transparent"}60`,
+                }}/>
               </div>
               <div style={{minWidth:0,flex:1}}>
-                <p style={{fontSize:12,fontWeight:700,color:C.textPri,lineHeight:1.25,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{displayName}</p>
-                <div style={{display:"inline-flex",alignItems:"center",gap:4,marginTop:4,background:badge.bg,borderRadius:20,padding:"2px 8px 2px 5px"}}>
-                  <div style={{width:5,height:5,borderRadius:"50%",background:badge.dot,flexShrink:0}}/>
-                  <span style={{fontSize:8.5,fontWeight:700,color:badge.text,letterSpacing:".03em",whiteSpace:"nowrap"}}>{roleLabel}</span>
-                </div>
+                <p className="nv-f" style={{
+                  fontSize:13.5,fontWeight:600,fontStyle:"italic",color:"#fff",
+                  lineHeight:1.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:"-.1px",
+                }}>{name}</p>
+                {/* Badge rôle DARK */}
+                <span style={{
+                  display:"inline-flex",alignItems:"center",gap:5,marginTop:5,
+                  background:rd.bg,border:`1px solid ${rd.border}`,
+                  borderRadius:30,padding:"3px 10px 3px 7px",
+                  fontSize:8.5,fontWeight:600,color:rd.text,letterSpacing:".04em",
+                }}>
+                  <span style={{width:5,height:5,borderRadius:"50%",background:rd.dot,boxShadow:`0 0 6px ${rd.dot}80`,flexShrink:0}}/>
+                  {label}
+                </span>
               </div>
             </div>
-            {perimetre && (
-              <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.iceBlue}55`,display:"flex",alignItems:"center",gap:6}}>
-                <div style={{width:4,height:4,borderRadius:1,background:C.textMuted,flexShrink:0,transform:"rotate(45deg)"}}/>
-                <span style={{fontSize:9.5,color:C.textMuted,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{perimetre}</span>
-              </div>
-            )}
+            {/* Périmètre */}
+            <div style={{marginTop:11,paddingTop:10,borderTop:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",gap:7}}>
+              <Globe size={9} color="rgba(255,255,255,.22)"/>
+              <span style={{fontSize:9,color:"rgba(255,255,255,.3)",fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:".02em"}}>{scope}</span>
+            </div>
           </div>
         )}
 
-        {/* Avatar seul (réduit) */}
-        {collapsed && (
-          <div style={{display:"flex",justifyContent:"center",padding:"8px 0 4px",flexShrink:0}}>
+        {/* Avatar mini (réduit) */}
+        {col&&(
+          <div style={{display:"flex",justifyContent:"center",padding:"8px 0 4px",zIndex:2,position:"relative",flexShrink:0}}>
             <div style={{
-              width:32,height:32,borderRadius:8,
-              background:`linear-gradient(135deg,${C.navy},${C.blue})`,
+              position:"relative",width:38,height:38,borderRadius:12,
+              background:`linear-gradient(140deg,${rd.dot}50,${rd.dot}18)`,
+              border:"1.5px solid rgba(255,255,255,.18)",
               display:"flex",alignItems:"center",justifyContent:"center",
-              boxShadow:`0 2px 8px ${C.blue}20`,
+              boxShadow:"0 4px 18px rgba(0,0,0,.4)",
             }}>
-              <span style={{fontSize:10.5,fontWeight:800,color:"#fff"}}>{initials}</span>
+              <span className="nv-f" style={{fontSize:14,fontWeight:600,fontStyle:"italic",color:"#fff"}}>{ini}</span>
+              <div style={{position:"absolute",bottom:-2,right:-2,width:11,height:11,borderRadius:3,background:online===false?DS.rose:online?DS.greenLight:"rgba(255,255,255,.2)",border:"2px solid rgba(20,30,55,.7)"}}/>
             </div>
           </div>
         )}
 
-        {/* Nav items */}
-        <nav className="na-scroll" style={{flex:1,overflowY:"auto",overflowX:"hidden",padding:"6px 8px 10px"}}>
-          {!collapsed && (
-            <p style={{fontSize:7.5,fontWeight:700,color:C.sideSection,textTransform:"uppercase",letterSpacing:".2em",padding:"6px 8px 3px",marginBottom:1}}>
-              Menu
-            </p>
-          )}
-          {navItems.map((item,i) => {
-            const Icon=item.icon, active=isActive(item.path);
-            return (
-              <Link key={i} to={item.path} className={`na-si${active?" act":""}`} style={{
-                justifyContent: collapsed?"center":"flex-start",
-                padding: collapsed?"9px":"8px 10px",
-                margin: collapsed?"2px 0":"1px 0",
-              }}>
-                <Icon size={14} color={active?C.blue:C.sideLabelDim} style={{flexShrink:0,transition:"color .13s"}}/>
-                <span className="na-lbl" style={{
-                  fontSize:12.5, fontWeight:active?700:500,
-                  color:active?C.blue:C.sideLabel,
-                  opacity:collapsed?0:1, maxWidth:collapsed?0:180,
+        {/* ── NAV ── */}
+        <nav className="nv-scroll" style={{
+          flex:1,overflowY:"auto",overflowX:"hidden",
+          padding:"6px 9px 10px",position:"relative",zIndex:2,
+        }}>
+          {!col&&<p className="nv-sec">Navigation</p>}
+          {items.map((item,i)=>{
+            const Icon=item.icon; const act=isAct(item.path);
+            return(
+              <Link key={i} to={item.path}
+                className={`nv-item${act?" act":""}`}
+                style={{
+                  justifyContent:col?"center":"flex-start",
+                  padding:col?"11px":"9px 11px",
+                  margin:col?"2px 0":"1.5px 0",
+                }}
+              >
+                <Icon size={15}
+                  color={act?"#9AB0FF":"rgba(255,255,255,.36)"}
+                  style={{flexShrink:0,transition:"color .15s, filter .15s",filter:act?"drop-shadow(0 0 4px rgba(93,130,255,.7))":"none"}}
+                />
+                <span style={{
+                  fontSize:12.5,fontWeight:act?600:400,
+                  color:act?"#fff":"rgba(255,255,255,.56)",
+                  overflow:"hidden",whiteSpace:"nowrap",
+                  opacity:col?0:1,maxWidth:col?0:195,
+                  transition:"opacity .2s,max-width .28s cubic-bezier(.16,1,.3,1)",
+                  letterSpacing:act?".01em":"0",
                 }}>{item.label}</span>
-                {collapsed && <span className="na-tip">{item.label}</span>}
+                {col&&<span className="nv-tip">{item.label}</span>}
               </Link>
             );
           })}
         </nav>
 
-        {/* Déconnexion */}
-        <div style={{padding: collapsed?"8px 8px 14px":"8px 8px 14px", borderTop:`1px solid ${C.sideBorder}`,flexShrink:0}}>
-          <button onClick={handleLogout} className="na-si" style={{
-            justifyContent:collapsed?"center":"flex-start",
-            padding:collapsed?"9px":"8px 10px",
-            background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:8,
+        {/* ── DÉCONNEXION ── */}
+        <div style={{padding:"8px 9px 14px",borderTop:"1px solid rgba(255,255,255,.06)",flexShrink:0,zIndex:2,position:"relative"}}>
+          <button onClick={logout} className="nv-item" style={{
+            justifyContent:col?"center":"flex-start",padding:col?"11px":"9px 11px",
+            background:"rgba(204,24,64,.11)",border:"1px solid rgba(204,24,64,.2)",borderRadius:10,
           }}
-            onMouseEnter={e=>e.currentTarget.style.background="#FEE2E2"}
-            onMouseLeave={e=>e.currentTarget.style.background="#FEF2F2"}
+          onMouseEnter={e=>e.currentTarget.style.background="rgba(204,24,64,.25)"}
+          onMouseLeave={e=>e.currentTarget.style.background="rgba(204,24,64,.11)"}
           >
-            <LogOut size={14} color={C.danger} style={{flexShrink:0}}/>
-            <span className="na-lbl" style={{fontSize:12.5,fontWeight:600,color:C.danger,opacity:collapsed?0:1,maxWidth:collapsed?0:180}}>
-              Déconnexion
-            </span>
-            {collapsed && <span className="na-tip" style={{background:C.danger}}>Déconnexion</span>}
+            <LogOut size={14} color="#FF9EAC" style={{flexShrink:0}}/>
+            <span style={{
+              fontSize:12.5,fontWeight:600,color:"#FF9EAC",
+              overflow:"hidden",whiteSpace:"nowrap",
+              opacity:col?0:1,maxWidth:col?0:190,
+              transition:"opacity .2s,max-width .28s cubic-bezier(.16,1,.3,1)",
+            }}>Déconnexion</span>
+            {col&&<span className="nv-tip" style={{background:"#5A0A18",border:"1px solid rgba(255,100,120,.2)"}}>Déconnexion</span>}
           </button>
         </div>
       </aside>
 
-      {/* ══ TOPBAR ══ */}
-      <header className="na-root" style={{
-        position:"fixed",top:0,left:sideW,right:0,
-        height:TOPBAR_H,
-        background:"rgba(255,255,255,0.97)",
-        backdropFilter:"blur(14px)",
-        borderBottom:`1px solid ${C.sideBorder}`,
-        boxShadow:`0 1px 0 #fff, 0 2px 16px ${C.shadow}`,
-        zIndex:200,
-        display:"flex",alignItems:"center",
-        padding:"0 24px",justifyContent:"space-between",
-        transition:"left .25s cubic-bezier(.22,1,.36,1)",
+      {/* ╔═══════════════════════════════════════════════════
+          ║  TOPBAR — Blanc laiteux · Détails orfèvres        ║
+          ║  Barre accent tricolore · Chip profil premium     ║
+          ╚═══════════════════════════════════════════════════*/}
+      <header className="nv" style={{
+        position:"fixed",top:0,left:sw,right:0,height:TOPBAR_H,
+        background:"rgba(252,253,255,.97)",
+        backdropFilter:"blur(24px) saturate(2.2)",
+        borderBottom:`1px solid ${DS.divider}`,
+        boxShadow:`0 1px 0 rgba(255,255,255,.95), 0 4px 30px ${DS.sh1}`,
+        zIndex:200,display:"flex",alignItems:"center",
+        padding:"0 22px",justifyContent:"space-between",
+        transition:"left .3s cubic-bezier(.16,1,.3,1)",
       }}>
 
-        {/* Gauche : titre page */}
-        <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
-          {/* Accent barre bleue */}
-          <div style={{
-            width:3,height:20,borderRadius:2,flexShrink:0,
-            background:`linear-gradient(180deg,${C.blue},${C.blueSoft})`,
-          }}/>
+        {/* Gauche — titre page avec barre tricolore verticale */}
+        <div style={{display:"flex",alignItems:"center",gap:14,minWidth:0}}>
+          {/* Barre tricolore verticale — marqueur institutionnel */}
+          <div style={{width:4,height:30,borderRadius:3,overflow:"hidden",flexShrink:0,display:"flex",flexDirection:"column"}}>
+            <div style={{flex:1,background:DS.rose}}/>
+            <div style={{flex:1,background:DS.goldViv}}/>
+            <div style={{flex:1,background:DS.greenLight}}/>
+          </div>
           <div>
-            <p style={{
-              fontSize:14,fontWeight:700,color:C.textPri,
-              letterSpacing:"-0.3px",lineHeight:1.2,
-              whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:360,
-            }}>
-              {navItems.find(i=>isActive(i.path))?.label || "Tableau de bord"}
-            </p>
-            <p style={{fontSize:9,color:C.textMuted,fontWeight:500,marginTop:1,letterSpacing:".03em"}}>
-              ONFPP · Plateforme de Formation Professionnelle
+            <p className="nv-f" style={{
+              fontSize:15,fontWeight:600,fontStyle:"italic",color:DS.textPri,
+              letterSpacing:"-.3px",lineHeight:1.15,
+              whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:380,
+            }}>{curPage}</p>
+            <p style={{fontSize:9,color:DS.textMuted,fontWeight:500,marginTop:2,letterSpacing:".08em",textTransform:"uppercase"}}>
+              ONFPP · Guinée
             </p>
           </div>
         </div>
 
         {/* Droite */}
-        <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
 
-          {/* Heure/date */}
-          <div style={{
-            display:"flex",flexDirection:"column",alignItems:"flex-end",
-            padding:"4px 11px",borderRadius:8,
-            background:C.iceBluePale,border:`1px solid ${C.iceBlue}70`,
-          }}>
-            <span style={{fontSize:12.5,fontWeight:700,color:C.textPri,lineHeight:1,letterSpacing:"-0.2px"}}>{heure}</span>
-            <span style={{fontSize:8,color:C.textMuted,fontWeight:500,marginTop:1.5,textTransform:"capitalize",letterSpacing:".03em"}}>{dateStr}</span>
+          {/* Statut connexion API */}
+          <div className="nv-stat">
+            {online===null
+              ?<><div className="nv-spin" style={{width:9,height:9,borderRadius:"50%",border:`1.5px solid ${DS.ice}`,borderTopColor:DS.brand}}/><span style={{color:DS.textMuted,fontWeight:500}}>Sync…</span></>
+              :online
+              ?<><div className="nv-live" style={{width:7,height:7,borderRadius:"50%",background:DS.greenLight}}/><span style={{color:DS.green,fontWeight:600}}>En ligne</span></>
+              :<><div style={{width:7,height:7,borderRadius:"50%",background:DS.rose}}/><span style={{color:DS.rose,fontWeight:600}}>Hors-ligne</span></>
+            }
           </div>
 
-          <div style={{width:1,height:20,background:C.divider,margin:"0 2px"}}/>
+          {/* Horloge — flip style institutionnel */}
+          <div style={{
+            display:"flex",flexDirection:"column",alignItems:"flex-end",
+            padding:"5px 12px",borderRadius:9,
+            background:DS.iceFaint,border:`1px solid ${DS.ice}`,
+            cursor:"default",
+          }}>
+            <span className="nv-f" style={{fontSize:13.5,fontWeight:600,color:DS.textPri,lineHeight:1,letterSpacing:".4px"}}>
+              {hh}<span className="nv-blink" style={{color:DS.brand}}>:</span>{mm}
+              <span style={{fontSize:10,color:DS.textMuted,fontWeight:400}}>:{ss}</span>
+            </span>
+            <span style={{fontSize:7.5,color:DS.textMuted,fontWeight:500,marginTop:2,textTransform:"capitalize",letterSpacing:".05em"}}>{ds}</span>
+          </div>
 
-          {/* Notifications */}
-          <div ref={notifRef} style={{position:"relative"}}>
-            <button className={`na-tb${showNotif?" on":""}`}
-              onClick={()=>{setShowNotif(v=>!v);if(!notifData.length)loadNotifs();}}
+          {/* Séparateur */}
+          <div style={{width:1,height:20,background:DS.divider,margin:"0 3px"}}/>
+
+          {/* Bell + panel notifs */}
+          <div ref={nRef} style={{position:"relative"}}>
+            <button className={`nv-btn${notif?" on":""}`}
+              onClick={()=>{setNotif(v=>!v);if(!nList.length)loadN();}}
               title="Notifications"
             >
               <Bell size={14}/>
             </button>
-            {totalNotifs>0 && (
-              <span className="na-badge" style={{
-                position:"absolute",top:-3,right:-3,
-                minWidth:15,height:15,borderRadius:9,
-                background:C.accent,color:"#fff",
-                fontSize:7.5,fontWeight:800,
-                display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",
-                border:"2px solid #fff",
-              }}>{totalNotifs>99?"99+":totalNotifs}</span>
+            {total>0&&(
+              <span className="nv-badge" style={{
+                position:"absolute",top:-5,right:-5,
+                minWidth:17,height:17,borderRadius:10,
+                background:DS.rose,color:"#fff",fontSize:8,fontWeight:800,
+                display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px",
+                border:"2.5px solid #F1F3FB",
+              }}>{total>99?"99+":total}</span>
             )}
 
-            {showNotif && (
-              <div className="na-panel" style={{
-                position:"absolute",top:42,right:0,width:310,
-                background:"#fff",border:`1px solid ${C.divider}`,
-                borderTop:`3px solid ${C.accent}`,
-                borderRadius:"0 0 14px 14px",
-                boxShadow:`0 20px 56px ${C.shadowMd}`,
+            {notif&&(
+              <div className="nv-panel" style={{
+                position:"absolute",top:42,right:0,width:320,
+                background:DS.surface,border:`1px solid ${DS.divider}`,
+                borderTop:`3px solid ${DS.goldBright}`,
+                borderRadius:"0 0 16px 16px",
+                boxShadow:`0 24px 60px ${DS.sh2}`,
                 zIndex:600,overflow:"hidden",
               }}>
-                <div style={{padding:"11px 15px 9px",borderBottom:`1px solid ${C.divider}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:C.accentBg}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <Bell size={12} color={C.accent}/>
-                    <span style={{fontSize:12,fontWeight:700,color:C.textPri}}>Notifications</span>
-                    {totalNotifs>0&&<span style={{fontSize:8.5,color:C.accent,fontWeight:700,background:`${C.accent}22`,padding:"2px 7px",borderRadius:20}}>{totalNotifs}</span>}
+                <div style={{padding:"12px 16px 10px",borderBottom:`1px solid ${DS.divider}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:DS.goldPale}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <Bell size={12} color={DS.gold}/>
+                    <span className="nv-f" style={{fontSize:12.5,fontWeight:600,color:DS.textPri}}>Notifications</span>
+                    {total>0&&<span style={{fontSize:9,color:DS.gold,fontWeight:700,background:`${DS.gold}22`,padding:"2px 7px",borderRadius:20}}>{total}</span>}
                   </div>
-                  <button onClick={()=>setShowNotif(false)} style={{width:20,height:20,borderRadius:5,background:C.divider,border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-                    <X size={9} color={C.textMuted}/>
+                  <button onClick={()=>setNotif(false)} style={{width:20,height:20,borderRadius:5,background:DS.divider,border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+                    <X size={9} color={DS.textMuted}/>
                   </button>
                 </div>
-                <div style={{maxHeight:290,overflowY:"auto"}}>
-                  {notifLoading&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",gap:8}}>
-                    <div className="na-spin" style={{width:16,height:16,borderRadius:"50%",border:`2px solid ${C.iceBlue}`,borderTopColor:C.accent}}/>
-                    <span style={{fontSize:11,color:C.textMuted}}>Chargement…</span>
+                <div style={{maxHeight:280,overflowY:"auto"}}>
+                  {nLoad&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",gap:8}}>
+                    <div className="nv-spin" style={{width:15,height:15,borderRadius:"50%",border:`2px solid ${DS.ice}`,borderTopColor:DS.goldViv}}/>
+                    <span style={{fontSize:11,color:DS.textMuted}}>Chargement…</span>
                   </div>}
-                  {!notifLoading&&<>
-                    {counts.contacts>0&&<Link to="/contacts" onClick={()=>setShowNotif(false)} style={{textDecoration:"none"}}>
-                      <div className="na-ni" style={{padding:"10px 15px",borderBottom:`1px solid ${C.divider}`,display:"flex",gap:9,background:`${C.danger}04`}}>
-                        <div style={{width:6,height:6,borderRadius:"50%",background:C.danger,flexShrink:0,marginTop:4,boxShadow:`0 0 0 3px ${C.danger}18`}}/>
+                  {!nLoad&&<>
+                    {counts.contacts>0&&<Link to="/contacts" onClick={()=>setNotif(false)} style={{textDecoration:"none"}}>
+                      <div className="nv-ni" style={{padding:"11px 16px",borderBottom:`1px solid ${DS.divider}`,display:"flex",gap:10,background:`${DS.rose}06`}}>
+                        <div style={{width:7,height:7,borderRadius:"50%",background:DS.rose,flexShrink:0,marginTop:4,boxShadow:`0 0 0 3px ${DS.rose}22`}}/>
                         <div style={{flex:1}}>
-                          <p style={{fontSize:11.5,fontWeight:700,color:C.textPri}}>Messages en attente</p>
-                          <p style={{fontSize:10,color:C.textMuted,marginTop:1}}>{counts.contacts} non traité(s)</p>
+                          <p style={{fontSize:12,fontWeight:700,color:DS.textPri}}>Messages en attente</p>
+                          <p style={{fontSize:10.5,color:DS.textMuted,marginTop:1}}>{counts.contacts} non traité(s)</p>
                         </div>
-                        <span style={{fontSize:8,color:C.danger,fontWeight:700,background:`${C.danger}12`,padding:"2px 6px",borderRadius:4,flexShrink:0,alignSelf:"flex-start"}}>Urgent</span>
+                        <span style={{fontSize:8.5,color:DS.rose,fontWeight:700,background:`${DS.rose}12`,padding:"2px 7px",borderRadius:5,flexShrink:0}}>Urgent</span>
                       </div>
                     </Link>}
-                    {counts.community>0&&<Link to="/listeCandidats" onClick={()=>setShowNotif(false)} style={{textDecoration:"none"}}>
-                      <div className="na-ni" style={{padding:"10px 15px",borderBottom:`1px solid ${C.divider}`,display:"flex",gap:9,background:`${C.blue}04`}}>
-                        <div style={{width:6,height:6,borderRadius:"50%",background:C.blue,flexShrink:0,marginTop:4,boxShadow:`0 0 0 3px ${C.blue}18`}}/>
+                    {counts.community>0&&<Link to="/listeCandidats" onClick={()=>setNotif(false)} style={{textDecoration:"none"}}>
+                      <div className="nv-ni" style={{padding:"11px 16px",borderBottom:`1px solid ${DS.divider}`,display:"flex",gap:10}}>
+                        <div style={{width:7,height:7,borderRadius:"50%",background:DS.electric,flexShrink:0,marginTop:4}}/>
                         <div style={{flex:1}}>
-                          <p style={{fontSize:11.5,fontWeight:700,color:C.textPri}}>Nouvelles candidatures</p>
-                          <p style={{fontSize:10,color:C.textMuted,marginTop:1}}>{counts.community} à examiner</p>
-                        </div>
-                      </div>
-                    </Link>}
-                    {counts.newsletter>0&&<Link to="/newsletter" onClick={()=>setShowNotif(false)} style={{textDecoration:"none"}}>
-                      <div className="na-ni" style={{padding:"10px 15px",borderBottom:`1px solid ${C.divider}`,display:"flex",gap:9,background:`${C.purple}04`}}>
-                        <div style={{width:6,height:6,borderRadius:"50%",background:C.purple,flexShrink:0,marginTop:4}}/>
-                        <div style={{flex:1}}>
-                          <p style={{fontSize:11.5,fontWeight:700,color:C.textPri}}>Abonnements newsletter</p>
-                          <p style={{fontSize:10,color:C.textMuted,marginTop:1}}>{counts.newsletter} nouvel(aux)</p>
+                          <p style={{fontSize:12,fontWeight:700,color:DS.textPri}}>Candidatures</p>
+                          <p style={{fontSize:10.5,color:DS.textMuted,marginTop:1}}>{counts.community} à examiner</p>
                         </div>
                       </div>
                     </Link>}
-                    {notifData.map((n,i)=>(
-                      <div key={i} className="na-ni" style={{padding:"9px 15px",borderBottom:i<notifData.length-1?`1px solid ${C.divider}`:"none",display:"flex",gap:9,background:n.read?"transparent":`${C.blue}03`}}>
-                        <div style={{width:6,height:6,borderRadius:"50%",flexShrink:0,marginTop:4,background:n.read?C.divider:C.blue}}/>
+                    {counts.newsletter>0&&<Link to="/newsletter" onClick={()=>setNotif(false)} style={{textDecoration:"none"}}>
+                      <div className="nv-ni" style={{padding:"11px 16px",borderBottom:`1px solid ${DS.divider}`,display:"flex",gap:10}}>
+                        <div style={{width:7,height:7,borderRadius:"50%",background:DS.violet,flexShrink:0,marginTop:4}}/>
+                        <div style={{flex:1}}>
+                          <p style={{fontSize:12,fontWeight:700,color:DS.textPri}}>Newsletter</p>
+                          <p style={{fontSize:10.5,color:DS.textMuted,marginTop:1}}>{counts.newsletter} nouveau(x)</p>
+                        </div>
+                      </div>
+                    </Link>}
+                    {nList.map((n,i)=>(
+                      <div key={i} className="nv-ni" style={{padding:"10px 16px",borderBottom:i<nList.length-1?`1px solid ${DS.divider}`:"none",display:"flex",gap:10}}>
+                        <div style={{width:7,height:7,borderRadius:"50%",flexShrink:0,marginTop:4,background:n.read?DS.divider:DS.electric}}/>
                         <div style={{flex:1,minWidth:0}}>
-                          <p style={{fontSize:11,fontWeight:n.read?500:700,color:C.textPri,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.text}</p>
-                          {n.detail&&<p style={{fontSize:9.5,color:C.textMuted,marginTop:1}}>{n.detail}</p>}
+                          <p style={{fontSize:11.5,fontWeight:n.read?400:600,color:DS.textPri,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.text}</p>
+                          {n.detail&&<p style={{fontSize:10,color:DS.textMuted,marginTop:1}}>{n.detail}</p>}
                         </div>
-                        <span style={{fontSize:7.5,color:n.type==="contact"?C.accent:C.blue,background:n.type==="contact"?`${C.accent}12`:`${C.blue}0E`,padding:"2px 5px",borderRadius:4,fontWeight:700,flexShrink:0}}>{n.type}</span>
                       </div>
                     ))}
-                    {totalNotifs===0&&notifData.length===0&&<div style={{textAlign:"center",padding:"22px 16px"}}>
-                      <CheckCircle2 size={20} color={C.success} style={{margin:"0 auto 8px",display:"block",opacity:.4}}/>
-                      <p style={{fontSize:11.5,color:C.textMuted,fontWeight:600}}>Aucune notification</p>
-                    </div>}
+                    {total===0&&nList.length===0&&(
+                      <div style={{textAlign:"center",padding:"24px 16px"}}>
+                        <CheckCircle2 size={20} color={DS.green} style={{margin:"0 auto 8px",display:"block",opacity:.4}}/>
+                        <p style={{fontSize:12,color:DS.textMuted,fontWeight:600}}>Aucune notification</p>
+                      </div>
+                    )}
                   </>}
                 </div>
-                {totalNotifs>0&&<div style={{padding:"9px 15px 11px",borderTop:`1px solid ${C.divider}`,textAlign:"center"}}>
-                  <Link to="/notifications" onClick={()=>setShowNotif(false)} style={{fontSize:11,fontWeight:600,color:C.blue,textDecoration:"none"}}>Voir tout →</Link>
+                {total>0&&<div style={{padding:"10px 16px 12px",borderTop:`1px solid ${DS.divider}`,textAlign:"center"}}>
+                  <Link to="/notifications" onClick={()=>setNotif(false)} style={{fontSize:11.5,fontWeight:700,color:DS.brand,textDecoration:"none"}}>Voir tout →</Link>
                 </div>}
               </div>
             )}
           </div>
 
-          <div style={{width:1,height:20,background:C.divider,margin:"0 2px"}}/>
+          {/* Séparateur */}
+          <div style={{width:1,height:20,background:DS.divider,margin:"0 3px"}}/>
 
-          {/* Chip profil */}
-          <div style={{
-            display:"flex",alignItems:"center",gap:8,
-            padding:"4px 11px 4px 4px",borderRadius:9,
-            border:`1px solid ${C.divider}`,background:"#FAFBFF",cursor:"default",
-            transition:"border-color .13s",
-          }}
-            onMouseEnter={e=>e.currentTarget.style.borderColor=C.iceBlue}
-            onMouseLeave={e=>e.currentTarget.style.borderColor=C.divider}
-          >
+          {/* ── CHIP PROFIL — premium glass look ── */}
+          <div className="nv-chip" style={{
+            display:"flex",alignItems:"center",gap:9,
+            padding:"5px 13px 5px 5px",borderRadius:11,
+            border:`1px solid ${DS.divider}`,
+            background:`linear-gradient(135deg,${DS.lift},${DS.iceFaint})`,
+            boxShadow:`0 2px 8px ${DS.sh1}`,
+          }}>
+            {/* Avatar brand blue avec initiales */}
             <div style={{
-              width:28,height:28,borderRadius:7,flexShrink:0,
-              background:`linear-gradient(135deg,${C.navy},${C.blue})`,
+              width:34,height:34,borderRadius:10,flexShrink:0,
+              background:`linear-gradient(135deg,${DS.brand},${DS.brandViv})`,
               display:"flex",alignItems:"center",justifyContent:"center",
-              boxShadow:`0 2px 8px ${C.blue}20`,
+              boxShadow:`0 4px 14px ${DS.brandGlow}`,
             }}>
-              <span style={{fontSize:10,fontWeight:800,color:"#fff",letterSpacing:"-0.2px"}}>{initials}</span>
+              <span className="nv-f" style={{fontSize:13,fontWeight:600,fontStyle:"italic",color:"#fff",letterSpacing:"-.1px"}}>{ini}</span>
             </div>
             <div style={{minWidth:0}}>
-              <p style={{fontSize:11.5,fontWeight:700,color:C.textPri,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:130}}>{displayName}</p>
-              <div style={{display:"flex",alignItems:"center",gap:4,marginTop:2}}>
-                <div style={{width:4,height:4,borderRadius:"50%",background:badge.dot,flexShrink:0}}/>
-                <span style={{fontSize:8.5,fontWeight:600,color:C.textMuted,textTransform:"uppercase",letterSpacing:".05em",whiteSpace:"nowrap"}}>{roleLabel}</span>
-              </div>
+              <p className="nv-f" style={{
+                fontSize:12.5,fontWeight:600,fontStyle:"italic",color:DS.textPri,
+                lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:134,
+                letterSpacing:"-.1px",
+              }}>{name}</p>
+              {/* Badge LIGHT sur fond clair */}
+              <span style={{
+                display:"inline-flex",alignItems:"center",gap:4,marginTop:3,
+                background:rl.bg,border:`1px solid ${rl.border}`,
+                borderRadius:20,padding:"1.5px 8px 1.5px 5px",
+                fontSize:8.5,fontWeight:600,color:rl.text,
+              }}>
+                <span style={{width:4,height:4,borderRadius:"50%",background:rl.dot,flexShrink:0}}/>
+                {label}
+              </span>
             </div>
           </div>
 
@@ -566,6 +817,4 @@ const NavAdmin = () => {
       </header>
     </>
   );
-};
-
-export default NavAdmin;
+}
